@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-primary: #064E3B;
+  --color-primary-foreground: #FFFFFF;
+  --color-secondary: #1E293B;
+  --color-secondary-foreground: #FFFFFF;
+
+  --color-background: #F8F9FF;
+  --color-foreground: #0B1C30;
+  --color-card: #FFFFFF;
+  --color-card-foreground: #0B1C30;
+  --color-muted: #F1F5F9;
+  --color-muted-foreground: #64748B;
+  --color-border: #E2E8F0;
+  --color-input: #E2E8F0;
+  --color-ring: #064E3B;
+
+  --color-destructive: #BA1A1A;
+  --color-success: #064E3B;
+  --color-warning: #B45309;
+
+  --color-status-available: #E6F4ED;
+  --color-status-available-foreground: #064E3B;
+  --color-status-progress: #E0F2FE;
+  --color-status-progress-foreground: #0369A1;
+  --color-status-critical: #FEE2E2;
+  --color-status-critical-foreground: #BA1A1A;
+  --color-status-warning-bg: #FEF3C7;
+  --color-status-warning-foreground: #B45309;
+  --color-status-completed: #E6F4ED;
+  --color-status-completed-foreground: #064E3B;
+  --color-status-discharged: #F1F5F9;
+  --color-status-discharged-foreground: #64748B;
+
+  --radius-sm: 0.125rem;
+  --radius: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-full: 9999px;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.05);
+
+  --font-headline: var(--font-plus-jakarta-sans);
+  --font-body: var(--font-inter);
+}
+
+:root {
+  --background: #F8F9FF;
+  --foreground: #0B1C30;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-body), "Inter", sans-serif;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-headline), "Plus Jakarta Sans", sans-serif;
+}
