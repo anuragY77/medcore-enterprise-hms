@@ -40,3 +40,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Internal project documentation (keep local only)
+Architecture.md
+Design.md
+PRD.md
+Phases.md
+Rules.md
+README.md
+docs/Memory.md
