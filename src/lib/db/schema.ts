@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, text, integer, real, timestamp } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -60,5 +60,63 @@ export const patientMedications = pgTable("patient_medications", {
   prescribedBy: varchar("prescribed_by", { length: 200 }),
   startDate: timestamp("start_date"),
   endDate: timestamp("end_date"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const consultations = pgTable("consultations", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  patientId: uuid("patient_id").notNull().references(() => patients.id, { onDelete: "cascade" }),
+  doctorName: varchar("doctor_name", { length: 200 }).notNull(),
+  chiefComplaint: varchar("chief_complaint", { length: 500 }).notNull(),
+  diagnosis: text("diagnosis").notNull(),
+  treatmentPlan: text("treatment_plan"),
+  notes: text("notes"),
+  followUpDate: timestamp("follow_up_date"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const prescriptions = pgTable("prescriptions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  patientId: uuid("patient_id").notNull().references(() => patients.id, { onDelete: "cascade" }),
+  consultationId: uuid("consultation_id").references(() => consultations.id, { onDelete: "set null" }),
+  medicationName: varchar("medication_name", { length: 200 }).notNull(),
+  dosage: varchar("dosage", { length: 100 }).notNull(),
+  frequency: varchar("frequency", { length: 100 }).notNull(),
+  duration: varchar("duration", { length: 100 }),
+  instructions: text("instructions"),
+  prescribedBy: varchar("prescribed_by", { length: 200 }).notNull(),
+  startDate: timestamp("start_date"),
+  endDate: timestamp("end_date"),
+  status: varchar("status", { length: 20 }).notNull().default("Active"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const medicalRecords = pgTable("medical_records", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  patientId: uuid("patient_id").notNull().references(() => patients.id, { onDelete: "cascade" }),
+  recordType: varchar("record_type", { length: 50 }).notNull(),
+  title: varchar("title", { length: 200 }).notNull(),
+  description: text("description"),
+  fileUrl: varchar("file_url", { length: 500 }),
+  recordedBy: varchar("recorded_by", { length: 200 }).notNull(),
+  recordDate: timestamp("record_date").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const vitals = pgTable("vitals", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  patientId: uuid("patient_id").notNull().references(() => patients.id, { onDelete: "cascade" }),
+  bloodPressureSystolic: integer("blood_pressure_systolic"),
+  bloodPressureDiastolic: integer("blood_pressure_diastolic"),
+  heartRate: integer("heart_rate"),
+  temperature: real("temperature"),
+  respiratoryRate: integer("respiratory_rate"),
+  oxygenSaturation: integer("oxygen_saturation"),
+  weight: real("weight"),
+  height: real("height"),
+  recordedBy: varchar("recorded_by", { length: 200 }).notNull(),
+  recordedAt: timestamp("recorded_at").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

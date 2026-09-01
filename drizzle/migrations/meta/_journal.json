@@ -15,6 +15,13 @@
       "when": 1788236789794,
       "tag": "0001_reflective_silvermane",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788239119883,
+      "tag": "0002_fancy_madrox",
+      "breakpoints": true
     }
   ]
 }
