@@ -1,35 +1,65 @@
+"use client";
+
+import { useState } from "react";
+import { useParams } from "next/navigation";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
+import { PrescriptionList, PrescriptionForm } from "@/components/clinical";
 
 export default function PrescriptionsPage() {
+  const params = useParams();
+  const patientId = params.id as string;
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [statusFilter, setStatusFilter] = useState("All");
+
   return (
     <div>
       <Breadcrumb
         items={[
           { label: "Patients", href: "/patients" },
-          { label: "PT-10482", href: "/patients/1" },
+          { label: patientId, href: `/patients/${patientId}` },
           { label: "Prescriptions" },
         ]}
       />
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-semibold text-foreground font-headline">
-            Doctor Prescription & Orders
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Medication orders and prescriptions
-          </p>
-        </div>
-      </div>
-      <div className="bg-card rounded-lg border border-border/50 p-12 shadow-sm flex flex-col items-center justify-center text-center">
-        <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mb-4">
-          <span className="text-2xl text-muted-foreground">🚧</span>
-        </div>
-        <h3 className="text-lg font-semibold text-foreground font-headline mb-1">
-          Coming Soon
-        </h3>
-        <p className="text-sm text-muted-foreground max-w-sm">
-          Prescriptions will be implemented in Phase 5.
+      <div className="mb-6">
+        <h1 className="text-3xl font-semibold text-foreground font-headline">
+          Prescriptions
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          Manage patient prescriptions and medication orders
         </p>
+      </div>
+      <div className="mb-4 flex gap-2">
+        {["All", "Active", "Completed", "Discontinued"].map((status) => (
+          <button
+            key={status}
+            onClick={() => setStatusFilter(status)}
+            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+              statusFilter === status
+                ? "bg-emerald-600 text-white"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            {status}
+          </button>
+        ))}
+      </div>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div>
+          <h2 className="mb-3 text-lg font-semibold text-foreground">
+            Prescription History
+          </h2>
+          <PrescriptionList
+            patientId={patientId}
+            statusFilter={statusFilter}
+            key={refreshKey}
+          />
+        </div>
+        <div>
+          <PrescriptionForm
+            patientId={patientId}
+            onSuccess={() => setRefreshKey((k) => k + 1)}
+          />
+        </div>
       </div>
     </div>
   );
