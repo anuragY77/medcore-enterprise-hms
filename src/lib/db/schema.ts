@@ -120,3 +120,21 @@ export const vitals = pgTable("vitals", {
   recordedAt: timestamp("recorded_at").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const staff = pgTable("staff", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  staffId: varchar("staff_id", { length: 20 }).notNull().unique(),
+  firstName: varchar("first_name", { length: 100 }).notNull(),
+  lastName: varchar("last_name", { length: 100 }).notNull(),
+  email: varchar("email", { length: 200 }).notNull().unique(),
+  phone: varchar("phone", { length: 20 }).notNull(),
+  role: varchar("role", { length: 50 }).notNull(),
+  department: varchar("department", { length: 100 }).notNull(),
+  specialization: varchar("specialization", { length: 200 }),
+  qualification: varchar("qualification", { length: 200 }),
+  experience: integer("experience"),
+  status: varchar("status", { length: 20 }).notNull().default("Active"),
+  joiningDate: timestamp("joining_date"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
