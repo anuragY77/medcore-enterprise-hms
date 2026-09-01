@@ -38,10 +38,6 @@ export default function StaffPage() {
   const [departmentFilter, setDepartmentFilter] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
 
-  useEffect(() => {
-    fetchStaff();
-  }, []);
-
   const fetchStaff = async () => {
     try {
       setLoading(true);
@@ -61,6 +57,23 @@ export default function StaffPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setLoading(true);
+        const res = await fetch("/api/staff");
+        if (!res.ok) throw new Error("Failed to fetch staff");
+        const data = await res.json();
+        setStaffList(data.data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load staff");
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
