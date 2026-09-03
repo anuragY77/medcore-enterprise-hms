@@ -138,3 +138,46 @@ export const staff = pgTable("staff", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+export const appointments = pgTable("appointments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  appointmentId: varchar("appointment_id", { length: 20 }).notNull().unique(),
+  patientId: uuid("patient_id").notNull().references(() => patients.id, { onDelete: "cascade" }),
+  doctorName: varchar("doctor_name", { length: 200 }).notNull(),
+  department: varchar("department", { length: 100 }).notNull(),
+  date: timestamp("date").notNull(),
+  time: varchar("time", { length: 20 }).notNull(),
+  type: varchar("type", { length: 50 }).notNull(),
+  status: varchar("status", { length: 20 }).notNull(),
+  reason: text("reason"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const departments = pgTable("departments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  departmentId: varchar("department_id", { length: 20 }).notNull().unique(),
+  name: varchar("name", { length: 100 }).notNull().unique(),
+  description: text("description"),
+  headDoctor: varchar("head_doctor", { length: 200 }),
+  phone: varchar("phone", { length: 20 }),
+  location: varchar("location", { length: 200 }),
+  totalBeds: integer("total_beds"),
+  status: varchar("status", { length: 20 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const beds = pgTable("beds", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  bedId: varchar("bed_id", { length: 20 }).notNull().unique(),
+  roomNumber: varchar("room_number", { length: 20 }).notNull(),
+  department: varchar("department", { length: 100 }).notNull(),
+  ward: varchar("ward", { length: 100 }),
+  type: varchar("type", { length: 50 }).notNull(),
+  status: varchar("status", { length: 20 }).notNull(),
+  patientId: uuid("patient_id").references(() => patients.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
