@@ -10,6 +10,9 @@ import {
   medicalRecords,
   vitals,
   staff,
+  appointments,
+  departments,
+  beds,
 } from "./schema";
 
 const db = drizzle(process.env.DATABASE_URL!);
@@ -26,4 +29,7 @@ export {
   medicalRecords,
   vitals,
   staff,
+  appointments,
+  departments,
+  beds,
 };
