@@ -36,6 +36,13 @@
       "when": 1788412915923,
       "tag": "0004_glossy_romulus",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788616822334,
+      "tag": "0005_fantastic_veda",
+      "breakpoints": true
     }
   ]
 }
