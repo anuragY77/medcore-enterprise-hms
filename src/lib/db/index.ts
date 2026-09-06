@@ -18,6 +18,7 @@ import {
   invoices,
   insuranceClaims,
   inventoryItems,
+  surgeries,
 } from "./schema";
 
 const db = drizzle(process.env.DATABASE_URL!);
@@ -42,4 +43,5 @@ export {
   invoices,
   insuranceClaims,
   inventoryItems,
+  surgeries,
 };
