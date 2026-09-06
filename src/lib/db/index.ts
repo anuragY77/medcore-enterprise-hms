@@ -18,6 +18,7 @@ import {
   invoices,
   insuranceClaims,
   inventoryItems,
+  emergencyCases,
   surgeries,
 } from "./schema";
 
@@ -43,5 +44,6 @@ export {
   invoices,
   insuranceClaims,
   inventoryItems,
+  emergencyCases,
   surgeries,
 };
