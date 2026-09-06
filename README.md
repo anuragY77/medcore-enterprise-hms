@@ -25,6 +25,7 @@ A production-ready, full-stack Hospital Management System built with Next.js 16,
 - Laboratory and diagnostics
 - Billing, invoicing, and insurance claims
 - Surgery and operating theater scheduling
+- Emergency department command center with triage management
 - Responsive design with dark/light mode support
 
 ## Getting Started
@@ -88,6 +89,7 @@ src/
 │   │   ├── insurance/         # Claims management
 │   │   ├── inventory/         # Inventory tracking
 │   │   ├── surgery/           # OT scheduling
+│   │   ├── emergency/         # Emergency command center
 │   │   ├── departments/       # Department management
 │   │   └── beds/              # Bed management
 │   └── api/                   # API route handlers
@@ -102,7 +104,7 @@ src/
 
 ## Database
 
-The system uses PostgreSQL with Drizzle ORM for type-safe database access. The schema includes 19 tables covering patients, staff, clinical records, pharmacy, laboratory, billing, insurance, inventory, and surgery management.
+The system uses PostgreSQL with Drizzle ORM for type-safe database access. The schema includes 20 tables covering patients, staff, clinical records, pharmacy, laboratory, billing, insurance, inventory, surgery, and emergency management.
 
 ## License
 
