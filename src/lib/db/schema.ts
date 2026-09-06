@@ -276,6 +276,22 @@ export const inventoryItems = pgTable("inventory_items", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const emergencyCases = pgTable("emergency_cases", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  caseId: varchar("case_id", { length: 20 }).notNull().unique(),
+  patientId: uuid("patient_id").notNull().references(() => patients.id, { onDelete: "cascade" }),
+  doctorId: uuid("doctor_id").references(() => staff.id, { onDelete: "restrict" }),
+  arrivalTime: timestamp("arrival_time").notNull(),
+  triageLevel: integer("triage_level").notNull(),
+  status: varchar("status", { length: 30 }).notNull(),
+  chiefComplaint: text("chief_complaint").notNull(),
+  diagnosis: text("diagnosis"),
+  treatment: text("treatment"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const surgeries = pgTable("surgeries", {
   id: uuid("id").defaultRandom().primaryKey(),
   surgeryId: varchar("surgery_id", { length: 20 }).notNull().unique(),
