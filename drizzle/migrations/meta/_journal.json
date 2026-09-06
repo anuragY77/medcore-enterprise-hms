@@ -43,6 +43,13 @@
       "when": 1788616822334,
       "tag": "0005_fantastic_veda",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788712749278,
+      "tag": "0006_watery_blink",
+      "breakpoints": true
     }
   ]
 }

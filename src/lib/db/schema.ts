@@ -275,3 +275,24 @@ export const inventoryItems = pgTable("inventory_items", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+export const surgeries = pgTable("surgeries", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  surgeryId: varchar("surgery_id", { length: 20 }).notNull().unique(),
+  patientId: uuid("patient_id").notNull().references(() => patients.id, { onDelete: "cascade" }),
+  surgeonId: uuid("surgeon_id").notNull().references(() => staff.id, { onDelete: "restrict" }),
+  procedureName: varchar("procedure_name", { length: 200 }).notNull(),
+  procedureType: varchar("procedure_type", { length: 100 }).notNull(),
+  surgeryDate: timestamp("surgery_date").notNull(),
+  estimatedDuration: integer("estimated_duration"),
+  operatingRoom: varchar("operating_room", { length: 50 }),
+  department: varchar("department", { length: 100 }).notNull(),
+  status: varchar("status", { length: 30 }).notNull(),
+  preOpNotes: text("pre_op_notes"),
+  postOpNotes: text("post_op_notes"),
+  complications: text("complications"),
+  anesthesiaType: varchar("anesthesia_type", { length: 50 }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
