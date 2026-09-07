@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, integer, real, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, text, integer, real, timestamp, json, index, boolean } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -312,3 +312,20 @@ export const surgeries = pgTable("surgeries", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+export const auditLogs = pgTable("audit_logs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  actorId: uuid("actor_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+  action: varchar("action", { length: 50 }).notNull(),
+  entityType: varchar("entity_type", { length: 50 }),
+  entityId: uuid("entity_id"),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+  severity: varchar("severity", { length: 20 }),
+  category: varchar("category", { length: 50 }),
+  success: boolean("success"),
+  metadata: json("metadata"),
+}, (table) => ({
+  actorIdIdx: index("audit_logs_actor_id_idx").on(table.actorId),
+  timestampIdx: index("audit_logs_timestamp_idx").on(table.timestamp),
+  actionIdx: index("audit_logs_action_idx").on(table.action),
+}));
