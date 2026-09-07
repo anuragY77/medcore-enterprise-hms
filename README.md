@@ -26,6 +26,7 @@ A production-ready, full-stack Hospital Management System built with Next.js 16,
 - Billing, invoicing, and insurance claims
 - Surgery and operating theater scheduling
 - Emergency department command center with triage management
+- Nurse Station Dashboard with ward patient visibility, task queue, shift summary, and quick actions
 - Responsive design with dark/light mode support
 
 ## Getting Started
@@ -90,6 +91,7 @@ src/
 │   │   ├── inventory/         # Inventory tracking
 │   │   ├── surgery/           # OT scheduling
 │   │   ├── emergency/         # Emergency command center
+│   │   ├── nursing/           # Nurse station dashboard
 │   │   ├── departments/       # Department management
 │   │   └── beds/              # Bed management
 │   └── api/                   # API route handlers
