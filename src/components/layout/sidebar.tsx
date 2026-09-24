@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { navigation, type NavGroup, type NavItem } from "@/lib/constants";
+import { hasPermission, type Role } from "@/types/auth";
 import { Activity } from "lucide-react";
 
 function SidebarNavItem({ item, isActive }: { item: NavItem; isActive: boolean }) {
@@ -27,13 +29,23 @@ function SidebarNavItem({ item, isActive }: { item: NavItem; isActive: boolean }
 
 function SidebarGroup({ group }: { group: NavGroup }) {
   const pathname = usePathname();
+  const { data: session } = useSession();
+  const role = session?.user?.role as Role | undefined;
+
+  const visibleItems = group.items.filter((item) => {
+    if (!item.permission) return true;
+    return role ? hasPermission(role, item.permission) : false;
+  });
+
+  if (visibleItems.length === 0) return null;
+
   return (
     <div className="mb-4">
       <p className="px-3 mb-2 text-[11px] font-medium uppercase tracking-wider text-white/40">
         {group.label}
       </p>
       <div className="space-y-0.5">
-        {group.items.map((item) => {
+        {visibleItems.map((item) => {
           const isActive =
             item.href === "/"
               ? pathname === "/"
