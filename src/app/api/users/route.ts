@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
 import { db, users } from "@/lib/db";
 import { createUserSchema } from "@/lib/validations/user";
+import { recordAudit } from "@/lib/audit";
 import bcrypt from "bcryptjs";
 
 export async function GET(request: NextRequest) {
@@ -144,6 +145,20 @@ export async function POST(request: NextRequest) {
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
       });
+
+    await recordAudit({
+      actorId: session.user.id,
+      action: "user.create",
+      entityType: "user",
+      entityId: newUser.id,
+      severity: "INFO",
+      category: "users",
+      success: true,
+      metadata: {
+        role: newUser.role,
+        department: newUser.department,
+      },
+    });
 
     return NextResponse.json(newUser, { status: 201 });
   } catch (error) {

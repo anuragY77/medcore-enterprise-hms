@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import type { Role } from "@/types/auth";
 import { ROLES } from "@/types/auth";
 import { db, users } from "./db";
+import { recordAudit } from "./audit";
 
 declare module "next-auth" {
   interface Session {
@@ -54,11 +55,44 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         if (!VALID_ROLES.has(user.role)) {
           console.error(`Invalid role "${user.role}" for user ${user.email}`);
+          await recordAudit({
+            actorId: user.id,
+            action: "auth.login",
+            entityType: "user",
+            entityId: user.id,
+            severity: "WARNING",
+            category: "auth",
+            success: false,
+            metadata: { reason: "invalid_role" },
+          });
           return null;
         }
 
         const isValid = await bcrypt.compare(password, user.password);
-        if (!isValid) return null;
+        if (!isValid) {
+          await recordAudit({
+            actorId: user.id,
+            action: "auth.login",
+            entityType: "user",
+            entityId: user.id,
+            severity: "WARNING",
+            category: "auth",
+            success: false,
+            metadata: { reason: "invalid_credentials" },
+          });
+          return null;
+        }
+
+        await recordAudit({
+          actorId: user.id,
+          action: "auth.login",
+          entityType: "user",
+          entityId: user.id,
+          severity: "INFO",
+          category: "auth",
+          success: true,
+          metadata: null,
+        });
 
         return {
           id: user.id,
