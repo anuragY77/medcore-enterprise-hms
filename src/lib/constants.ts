@@ -27,6 +27,8 @@ export interface NavItem {
   label: string;
   href: string;
   icon: LucideIcon;
+  /** Optional frontend visibility permission; backend remains the security boundary. */
+  permission?: string;
 }
 
 export interface NavGroup {
@@ -74,10 +76,10 @@ export const navigation: NavGroup[] = [
     items: [
       { label: "Records", href: "/records", icon: FileText },
       { label: "Notifications", href: "/notifications", icon: Bell },
-      { label: "Reports", href: "/reports", icon: BarChart3 },
-      { label: "Audit Log", href: "/security", icon: ScanEye },
-      { label: "Users & Roles", href: "/users", icon: ClipboardList },
-      { label: "Settings", href: "/settings", icon: Settings },
+      { label: "Reports", href: "/reports", icon: BarChart3, permission: "reports:read" },
+      { label: "Audit Log", href: "/security", icon: ScanEye, permission: "audit:read" },
+      { label: "Users & Roles", href: "/users", icon: ClipboardList, permission: "users:read" },
+      { label: "Settings", href: "/settings", icon: Settings, permission: "settings:read" },
     ],
   },
 ];
