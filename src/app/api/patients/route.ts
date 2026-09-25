@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq, or, ilike, sql } from "drizzle-orm";
+import { auth } from "@/lib/auth";
+import { hasPermission } from "@/types/auth";
 import { db, patients } from "@/lib/db";
 
 export async function GET(request: NextRequest) {
   try {
+    const session = await auth();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!hasPermission(session.user.role, "patients:read")) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const { searchParams } = new URL(request.url);
     const query = searchParams.get("query") || "";
     const status = searchParams.get("status") || "All";
@@ -68,6 +78,14 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await auth();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!hasPermission(session.user.role, "patients:write")) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const body = await request.json();
 
     const {
