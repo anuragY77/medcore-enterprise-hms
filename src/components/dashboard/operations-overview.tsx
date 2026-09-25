@@ -1,14 +1,18 @@
 import { cn } from "@/lib/utils";
-import { OPERATIONS_DATA } from "./dashboard-data";
+import type { OperationMetric } from "@/types/dashboard";
 
-export function OperationsOverview() {
+interface OperationsOverviewProps {
+  metrics: OperationMetric[];
+}
+
+export function OperationsOverview({ metrics }: OperationsOverviewProps) {
   return (
     <div className="bg-card rounded-lg border border-border/50 p-6 shadow-sm">
       <h2 className="text-lg font-semibold text-foreground font-headline mb-4">
         Operations Overview
       </h2>
       <div className="grid grid-cols-2 gap-4">
-        {OPERATIONS_DATA.map((metric) => (
+        {metrics.map((metric) => (
           <div
             key={metric.label}
             className="p-3 rounded-lg bg-muted/50 border border-border/30"
