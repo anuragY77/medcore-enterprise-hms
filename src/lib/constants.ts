@@ -75,7 +75,7 @@ export const navigation: NavGroup[] = [
     label: "ADMINISTRATION",
     items: [
       { label: "Records", href: "/records", icon: FileText },
-      { label: "Notifications", href: "/notifications", icon: Bell },
+      { label: "Notifications", href: "/notifications", icon: Bell, permission: "notifications:read" },
       { label: "Reports", href: "/reports", icon: BarChart3, permission: "reports:read" },
       { label: "Audit Log", href: "/security", icon: ScanEye, permission: "audit:read" },
       { label: "Users & Roles", href: "/users", icon: ClipboardList, permission: "users:read" },
