@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Eye } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, Pencil, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ROLE_LABELS, type Role } from "@/types/auth";
 
@@ -27,6 +27,9 @@ interface UserTableProps {
   meta: UsersMeta;
   onPageChange: (page: number) => void;
   onView: (user: UserRecord) => void;
+  onEdit?: (user: UserRecord) => void;
+  onDelete?: (user: UserRecord) => void;
+  currentUserId?: string;
 }
 
 const ROLE_COLORS: Record<string, string> = {
@@ -54,7 +57,7 @@ function initials(name: string): string {
     .join("");
 }
 
-export function UserTable({ users, meta, onPageChange, onView }: UserTableProps) {
+export function UserTable({ users, meta, onPageChange, onView, onEdit, onDelete, currentUserId }: UserTableProps) {
   const { page, pageSize, total, totalPages } = meta;
   const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const end = Math.min(page * pageSize, total);
@@ -110,13 +113,38 @@ export function UserTable({ users, meta, onPageChange, onView }: UserTableProps)
                     {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "—"}
                   </td>
                   <td className="px-4 py-3">
-                    <button
-                      onClick={() => onView(user)}
-                      className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                      title="View user"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => onView(user)}
+                        className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        title="View user"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+                      {onEdit && (
+                        <button
+                          onClick={() => onEdit(user)}
+                          className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                          title="Edit user"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                      )}
+                      {onDelete && (
+                        <button
+                          onClick={() => onDelete(user)}
+                          disabled={user.id === currentUserId}
+                          title={
+                            user.id === currentUserId
+                              ? "You cannot delete your own account"
+                              : "Delete user"
+                          }
+                          className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-destructive transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-muted disabled:hover:text-muted-foreground"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))

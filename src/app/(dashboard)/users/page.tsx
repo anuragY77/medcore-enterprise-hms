@@ -50,11 +50,17 @@ export default function UsersPage() {
   const [page, setPage] = useState(1);
 
   const [formOpen, setFormOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserRecord | null>(null);
   const [viewUser, setViewUser] = useState<UserRecord | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<UserRecord | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const role = session?.user?.role as Role | undefined;
   const canRead = role ? hasPermission(role, "users:read") : false;
   const canWrite = role ? hasPermission(role, "users:write") : false;
+  const canDelete = role ? hasPermission(role, "users:delete") : false;
+  const currentUserId = session?.user?.id;
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -159,6 +165,55 @@ export default function UsersPage() {
     fetchUsers();
   };
 
+  const handleEdit = (user: UserRecord) => {
+    setEditingUser(user);
+    setFormOpen(true);
+  };
+
+  const handleEditSuccess = () => {
+    setEditingUser(null);
+    setLoading(true);
+    fetchUsers();
+  };
+
+  const handleFormOpenChange = (open: boolean) => {
+    setFormOpen(open);
+    if (!open) {
+      setEditingUser(null);
+    }
+  };
+
+  const handleDeleteRequest = (user: UserRecord) => {
+    setDeleteError(null);
+    setConfirmDelete(user);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!confirmDelete || deleting) return;
+    try {
+      setDeleting(true);
+      setDeleteError(null);
+      const res = await fetch(`/api/users/${confirmDelete.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.error || "Failed to delete user");
+      }
+      setConfirmDelete(null);
+      if (users.length === 1 && page > 1) {
+        setPage(page - 1);
+        return;
+      }
+      setLoading(true);
+      fetchUsers();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete user");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const showAuthLoading = status === "loading";
   const showDenied = !showAuthLoading && (!session || !canRead);
 
@@ -185,7 +240,10 @@ export default function UsersPage() {
         </div>
         {canWrite && !showDenied && (
           <button
-            onClick={() => setFormOpen(true)}
+            onClick={() => {
+              setEditingUser(null);
+              setFormOpen(true);
+            }}
             className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
           >
             <Plus className="h-4 w-4 inline-block mr-1 -mt-0.5" />
@@ -273,13 +331,18 @@ export default function UsersPage() {
               meta={meta}
               onPageChange={handlePageChange}
               onView={setViewUser}
+              onEdit={canWrite ? handleEdit : undefined}
+              onDelete={canDelete ? handleDeleteRequest : undefined}
+              currentUserId={currentUserId}
             />
           )}
 
           <UserForm
             open={formOpen}
-            onOpenChange={setFormOpen}
-            onSuccess={handleFormSuccess}
+            onOpenChange={handleFormOpenChange}
+            initialData={editingUser ?? undefined}
+            mode={editingUser ? "edit" : "create"}
+            onSuccess={editingUser ? handleEditSuccess : handleFormSuccess}
           />
 
           <Sheet open={!!viewUser} onOpenChange={(o) => !o && setViewUser(null)}>
@@ -331,6 +394,41 @@ export default function UsersPage() {
               )}
             </SheetContent>
           </Sheet>
+
+          {confirmDelete && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+              <div className="bg-card rounded-lg border border-border/50 p-6 shadow-lg max-w-sm w-full mx-4">
+                <h3 className="text-lg font-semibold text-foreground mb-2">
+                  Confirm Delete
+                </h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Delete user <strong>{confirmDelete.name}</strong>? This action
+                  cannot be undone.
+                </p>
+                {deleteError && (
+                  <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-md text-sm mb-4">
+                    {deleteError}
+                  </div>
+                )}
+                <div className="flex items-center gap-3 justify-end">
+                  <button
+                    onClick={() => setConfirmDelete(null)}
+                    disabled={deleting}
+                    className="px-4 py-2 rounded-md border border-border/50 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDeleteConfirm}
+                    disabled={deleting}
+                    className="px-4 py-2 rounded-md bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+                  >
+                    {deleting ? "Deleting..." : "Delete"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

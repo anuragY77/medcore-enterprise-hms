@@ -1,9 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { createUserSchema, type CreateUserData } from "@/lib/validations/user";
+import {
+  createUserSchema,
+  updateUserSchema,
+  type CreateUserData,
+} from "@/lib/validations/user";
 import {
   Sheet,
   SheetContent,
@@ -27,15 +31,34 @@ const DEPARTMENT_OPTIONS = [
   "Nursing",
 ];
 
+interface UserFormInitialData {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  department: string;
+  avatar: string | null;
+}
+
 interface UserFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialData?: UserFormInitialData;
+  mode?: "create" | "edit";
   onSuccess: () => void;
 }
 
-export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
+export function UserForm({
+  open,
+  onOpenChange,
+  initialData,
+  mode = "create",
+  onSuccess,
+}: UserFormProps) {
   const [serverError, setServerError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const isEdit = mode === "edit";
 
   const {
     register,
@@ -43,15 +66,25 @@ export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
     reset,
     formState: { errors },
   } = useForm<CreateUserData>({
-    resolver: zodResolver(createUserSchema),
-    defaultValues: {
-      name: "",
-      email: "",
-      password: "",
-      role: undefined,
-      department: "",
-      avatar: "",
-    },
+    resolver: zodResolver(
+      isEdit ? updateUserSchema : createUserSchema
+    ) as unknown as Resolver<CreateUserData>,
+    defaultValues: isEdit && initialData
+      ? {
+          name: initialData.name,
+          email: initialData.email,
+          role: initialData.role as CreateUserData["role"],
+          department: initialData.department,
+          avatar: initialData.avatar ?? "",
+        }
+      : {
+          name: "",
+          email: "",
+          password: "",
+          role: undefined,
+          department: "",
+          avatar: "",
+        },
   });
 
   const onSubmit = async (data: CreateUserData) => {
@@ -59,15 +92,29 @@ export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
       setIsSubmitting(true);
       setServerError(null);
 
-      const res = await fetch("/api/users", {
-        method: "POST",
+      const url = isEdit && initialData
+        ? `/api/users/${initialData.id}`
+        : "/api/users";
+
+      const payload = isEdit
+        ? {
+            name: data.name,
+            email: data.email,
+            role: data.role,
+            department: data.department,
+            avatar: data.avatar ?? "",
+          }
+        : data;
+
+      const res = await fetch(url, {
+        method: isEdit ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error || "Failed to create user");
+        throw new Error(err.error || "Failed to save user");
       }
 
       reset();
@@ -92,8 +139,12 @@ export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
     <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
         <SheetHeader className="mb-4">
-          <SheetTitle>Create User</SheetTitle>
-          <SheetDescription>Add a new user and assign a role.</SheetDescription>
+          <SheetTitle>{isEdit ? "Edit User" : "Create User"}</SheetTitle>
+          <SheetDescription>
+            {isEdit
+              ? "Update user details and role assignment."
+              : "Add a new user and assign a role."}
+          </SheetDescription>
         </SheetHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -132,20 +183,22 @@ export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
             )}
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">
-              Password <span className="text-destructive">*</span>
-            </label>
-            <input
-              type="password"
-              {...register("password")}
-              placeholder="Minimum 6 characters"
-              className="w-full px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-            />
-            {errors.password && (
-              <p className="text-xs text-destructive mt-1">{errors.password.message}</p>
-            )}
-          </div>
+          {!isEdit && (
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">
+                Password <span className="text-destructive">*</span>
+              </label>
+              <input
+                type="password"
+                {...register("password")}
+                placeholder="Minimum 6 characters"
+                className="w-full px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+              {errors.password && (
+                <p className="text-xs text-destructive mt-1">{errors.password.message}</p>
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -210,7 +263,7 @@ export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
               disabled={isSubmitting}
               className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
-              {isSubmitting ? "Saving..." : "Create User"}
+              {isSubmitting ? "Saving..." : isEdit ? "Update User" : "Create User"}
             </button>
             <button
               type="button"

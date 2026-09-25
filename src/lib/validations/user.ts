@@ -13,3 +13,15 @@ export const createUserSchema = z.object({
 });
 
 export type CreateUserData = z.infer<typeof createUserSchema>;
+
+export const updateUserSchema = z.object({
+  name: z.string().min(1, "Name is required").max(200).optional(),
+  email: z.string().email("Invalid email address").max(200).optional(),
+  role: z.enum(ROLE_VALUES, { message: "Invalid role" }).optional(),
+  department: z.string().min(1, "Department is required").max(100).optional(),
+  avatar: z.string().max(10).optional().nullable(),
+});
+
+export type UpdateUserData = z.infer<typeof updateUserSchema>;
+
+export const userIdSchema = z.string().uuid({ message: "Invalid user ID" });
