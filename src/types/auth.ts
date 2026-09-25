@@ -64,6 +64,8 @@ export const ROLE_PERMISSIONS: Record<Role, string[]> = {
     "inventory:write",
     "nursing:read",
     "nursing:write",
+    "notifications:read",
+    "notifications:write",
   ],
   DOCTOR: [
     "patients:read",
@@ -78,6 +80,7 @@ export const ROLE_PERMISSIONS: Record<Role, string[]> = {
     "emergency:read",
     "surgery:read",
     "nursing:read",
+    "notifications:read",
   ],
   NURSE: [
     "patients:read",
@@ -89,6 +92,7 @@ export const ROLE_PERMISSIONS: Record<Role, string[]> = {
     "nursing:read",
     "nursing:write",
     "emergency:read",
+    "notifications:read",
   ],
   RECEPTIONIST: [
     "patients:read",
@@ -99,6 +103,7 @@ export const ROLE_PERMISSIONS: Record<Role, string[]> = {
     "insurance:read",
     "departments:read",
     "beds:read",
+    "notifications:read",
   ],
   PHARMACIST: [
     "patients:read",
@@ -107,6 +112,7 @@ export const ROLE_PERMISSIONS: Record<Role, string[]> = {
     "inventory:read",
     "inventory:write",
     "laboratory:read",
+    "notifications:read",
   ],
   LAB_TECHNICIAN: [
     "patients:read",
@@ -121,6 +127,7 @@ export const ROLE_PERMISSIONS: Record<Role, string[]> = {
     "insurance:read",
     "insurance:write",
     "reports:read",
+    "notifications:read",
   ],
   SURGEON: [
     "patients:read",
@@ -137,6 +144,7 @@ export const ROLE_PERMISSIONS: Record<Role, string[]> = {
     "security:read",
     "patients:read",
     "staff:read",
+    "notifications:read",
   ],
 };
 

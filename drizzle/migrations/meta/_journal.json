@@ -64,6 +64,13 @@
       "when": 1788777347198,
       "tag": "0008_married_brother_voodoo",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790348310042,
+      "tag": "0009_sloppy_scarlet_spider",
+      "breakpoints": true
     }
   ]
 }

@@ -329,3 +329,19 @@ export const auditLogs = pgTable("audit_logs", {
   timestampIdx: index("audit_logs_timestamp_idx").on(table.timestamp),
   actionIdx: index("audit_logs_action_idx").on(table.action),
 }));
+
+export const notifications = pgTable("notifications", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  recipientId: uuid("recipient_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: varchar("title", { length: 200 }).notNull(),
+  message: text("message").notNull(),
+  type: varchar("type", { length: 30 }).notNull().default("SYSTEM"),
+  isRead: boolean("is_read").notNull().default(false),
+  readAt: timestamp("read_at"),
+  action: varchar("action", { length: 500 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  recipientIdIdx: index("notifications_recipient_id_idx").on(table.recipientId),
+  createdAtIdx: index("notifications_created_at_idx").on(table.createdAt),
+  recipientReadIdx: index("notifications_recipient_is_read_idx").on(table.recipientId, table.isRead, table.createdAt),
+}));
