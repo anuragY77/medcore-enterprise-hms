@@ -10,9 +10,13 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
-import { ADMISSIONS_CHART_DATA } from "./dashboard-data";
+import type { DashboardChartDataPoint } from "@/types/dashboard";
 
-export function PatientAdmissionsChart() {
+interface PatientAdmissionsChartProps {
+  data: DashboardChartDataPoint[];
+}
+
+export function PatientAdmissionsChart({ data }: PatientAdmissionsChartProps) {
   return (
     <div className="bg-card rounded-lg border border-border/50 p-6 shadow-sm">
       <h2 className="text-lg font-semibold text-foreground font-headline mb-4">
@@ -20,7 +24,7 @@ export function PatientAdmissionsChart() {
       </h2>
       <div className="h-[280px]">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={ADMISSIONS_CHART_DATA}>
+          <LineChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
             <XAxis
               dataKey="day"
@@ -29,6 +33,7 @@ export function PatientAdmissionsChart() {
               tickLine={false}
             />
             <YAxis
+              allowDecimals={false}
               tick={{ fontSize: 12, fill: "#64748B" }}
               axisLine={{ stroke: "#E2E8F0" }}
               tickLine={false}
