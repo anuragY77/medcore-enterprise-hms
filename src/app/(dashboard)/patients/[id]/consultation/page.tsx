@@ -1,13 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
 import { ConsultationList, ConsultationForm } from "@/components/clinical";
+import { CheckCircle2 } from "lucide-react";
 
 export default function ConsultationPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const patientId = params.id as string;
+  const created = searchParams.get("created");
   const [refreshKey, setRefreshKey] = useState(0);
 
   return (
@@ -27,12 +30,28 @@ export default function ConsultationPage() {
           Manage clinical consultations
         </p>
       </div>
+      {created && (
+        <div
+          role="status"
+          className="mb-6 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
+        >
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          <span>
+            Consultation created. Reference:{" "}
+            <span className="font-mono font-medium">{created}</span>
+          </span>
+        </div>
+      )}
       <div className="grid gap-6 lg:grid-cols-2">
         <div>
           <h2 className="mb-3 text-lg font-semibold text-foreground">
             Consultation History
           </h2>
-          <ConsultationList patientId={patientId} key={refreshKey} />
+          <ConsultationList
+            patientId={patientId}
+            highlightId={created ?? undefined}
+            key={refreshKey}
+          />
         </div>
         <div>
           <ConsultationForm
