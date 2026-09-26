@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insuranceClaimSchema, type InsuranceClaimFormData } from "@/lib/validations/insurance";
+import { PatientPicker } from "@/components/patients/patient-picker";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 
 interface ClaimFormProps {
@@ -37,6 +38,8 @@ export function ClaimForm({ open, onOpenChange, initialData, mode = "create", on
     register,
     handleSubmit,
     reset,
+    control,
+    setValue,
     formState: { errors },
   } = useForm<InsuranceClaimFormData>({
     resolver: zodResolver(insuranceClaimSchema),
@@ -66,6 +69,8 @@ export function ClaimForm({ open, onOpenChange, initialData, mode = "create", on
           claimAmount: 0,
         },
   });
+
+  const patientIdValue = useWatch({ control, name: "patientId" });
 
   const onSubmit = async (data: InsuranceClaimFormData) => {
     try {
@@ -122,19 +127,14 @@ export function ClaimForm({ open, onOpenChange, initialData, mode = "create", on
             </div>
           )}
 
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">
-              Patient ID <span className="text-destructive">*</span>
-            </label>
-            <input
-              {...register("patientId")}
-              placeholder="Enter patient UUID"
-              className="w-full px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono"
-            />
-            {errors.patientId && (
-              <p className="text-xs text-destructive mt-1">{errors.patientId.message}</p>
-            )}
-          </div>
+          <PatientPicker
+            value={patientIdValue ?? ""}
+            onChange={(id) =>
+              setValue("patientId", id, { shouldValidate: true, shouldDirty: true })
+            }
+            error={errors.patientId?.message}
+            required
+          />
 
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">Invoice ID</label>

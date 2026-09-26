@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { surgerySchema, type SurgeryFormData } from "@/lib/validations/surgery";
+import { PatientPicker } from "@/components/patients/patient-picker";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 
 const PROCEDURE_TYPES = [
@@ -61,6 +62,8 @@ export function SurgeryForm({ open, onOpenChange, initialData, mode = "create", 
     register,
     handleSubmit,
     reset,
+    control,
+    setValue,
     formState: { errors },
   } = useForm<SurgeryFormData>({
     resolver: zodResolver(surgerySchema),
@@ -88,6 +91,8 @@ export function SurgeryForm({ open, onOpenChange, initialData, mode = "create", 
           surgeryDate: new Date().toISOString().split("T")[0],
         },
   });
+
+  const patientIdValue = useWatch({ control, name: "patientId" });
 
   const onSubmit = async (data: SurgeryFormData) => {
     try {
@@ -144,19 +149,14 @@ export function SurgeryForm({ open, onOpenChange, initialData, mode = "create", 
             </div>
           )}
 
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">
-              Patient ID <span className="text-destructive">*</span>
-            </label>
-            <input
-              {...register("patientId")}
-              placeholder="Enter patient UUID"
-              className="w-full px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono"
-            />
-            {errors.patientId && (
-              <p className="text-xs text-destructive mt-1">{errors.patientId.message}</p>
-            )}
-          </div>
+          <PatientPicker
+            value={patientIdValue ?? ""}
+            onChange={(id) =>
+              setValue("patientId", id, { shouldValidate: true, shouldDirty: true })
+            }
+            error={errors.patientId?.message}
+            required
+          />
 
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">

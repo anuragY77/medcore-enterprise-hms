@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { appointmentSchema, type AppointmentFormData } from "@/lib/validations/appointment";
+import { PatientPicker } from "@/components/patients/patient-picker";
 
 const DEPARTMENTS = [
   "Cardiology",
@@ -50,6 +51,8 @@ export function AppointmentForm({ initialData, mode = "create" }: AppointmentFor
   const {
     register,
     handleSubmit,
+    control,
+    setValue,
     formState: { errors },
   } = useForm<AppointmentFormData>({
     resolver: zodResolver(appointmentSchema),
@@ -70,6 +73,8 @@ export function AppointmentForm({ initialData, mode = "create" }: AppointmentFor
           type: "Consultation",
         },
   });
+
+  const patientIdValue = useWatch({ control, name: "patientId" });
 
   const onSubmit = async (data: AppointmentFormData) => {
     try {
@@ -109,19 +114,14 @@ export function AppointmentForm({ initialData, mode = "create" }: AppointmentFor
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-1">
-            Patient ID <span className="text-destructive">*</span>
-          </label>
-          <input
-            {...register("patientId")}
-            placeholder="UUID format"
-            className="w-full px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-          />
-          {errors.patientId && (
-            <p className="text-xs text-destructive mt-1">{errors.patientId.message}</p>
-          )}
-        </div>
+        <PatientPicker
+          value={patientIdValue ?? ""}
+          onChange={(id) =>
+            setValue("patientId", id, { shouldValidate: true, shouldDirty: true })
+          }
+          error={errors.patientId?.message}
+          required
+        />
 
         <div>
           <label className="block text-sm font-medium text-foreground mb-1">
