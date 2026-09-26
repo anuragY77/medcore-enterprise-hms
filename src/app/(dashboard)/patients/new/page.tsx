@@ -67,10 +67,12 @@ const inputClasses =
 export default function NewPatientPage() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
 
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors },
   } = useForm<PatientFormData>({
     resolver: zodResolver(patientSchema) as Resolver<PatientFormData>,
@@ -80,12 +82,62 @@ export default function NewPatientPage() {
   });
 
   const onSubmit = async (data: PatientFormData) => {
-    setIsSubmitting(true);
-    // TODO: Connect to API endpoint in next step
-    console.log("Patient registration data:", data);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    setIsSubmitting(false);
-    router.push("/patients");
+    try {
+      setIsSubmitting(true);
+      setServerError(null);
+
+      const res = await fetch("/api/patients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+
+      if (res.status === 401) {
+        router.push("/login?callbackUrl=/patients/new");
+        return;
+      }
+      if (res.status === 403) {
+        setServerError("You do not have permission to register patients.");
+        return;
+      }
+      if (res.status === 400) {
+        const err = await res.json().catch(() => null);
+        const details = err?.details as
+          | Record<string, string[] | undefined>
+          | undefined;
+        let mappedField = false;
+        if (details && typeof details === "object") {
+          for (const [field, messages] of Object.entries(details)) {
+            if (messages && messages.length > 0 && field in data) {
+              setError(field as keyof PatientFormData, { message: messages[0] });
+              mappedField = true;
+            }
+          }
+        }
+        if (!mappedField) {
+          setServerError(
+            (err?.error as string | undefined) || "Failed to register patient"
+          );
+        }
+        return;
+      }
+      if (!res.ok) {
+        setServerError("Failed to register patient. Please try again.");
+        return;
+      }
+
+      const created = await res.json().catch(() => null);
+      if (created?.id) {
+        router.push(`/patients/${created.id}`);
+      } else {
+        router.push("/patients");
+      }
+      router.refresh();
+    } catch {
+      setServerError("Failed to register patient. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -117,6 +169,14 @@ export default function NewPatientPage() {
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        {serverError && (
+          <div
+            role="alert"
+            className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-md text-sm"
+          >
+            {serverError}
+          </div>
+        )}
         <div className="bg-card rounded-lg border border-border/50 p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-foreground font-headline mb-4">
             Personal Information

@@ -12,9 +12,17 @@ import {
 import { cn } from "@/lib/utils";
 import type { Patient } from "@/types";
 
+export interface PatientsMeta {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
 interface PatientTableProps {
   patients: Patient[];
-  pageSize?: number;
+  meta: PatientsMeta;
+  onPageChange: (page: number) => void;
 }
 
 type SortField = "patientId" | "firstName" | "lastName" | "department" | "status" | "createdAt";
@@ -46,10 +54,11 @@ function SortIcon({
   );
 }
 
-export function PatientTable({ patients, pageSize = 10 }: PatientTableProps) {
+export function PatientTable({ patients, meta, onPageChange }: PatientTableProps) {
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-  const [currentPage, setCurrentPage] = useState(1);
+
+  const { page, pageSize, total, totalPages } = meta;
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -58,7 +67,6 @@ export function PatientTable({ patients, pageSize = 10 }: PatientTableProps) {
       setSortField(field);
       setSortDirection("asc");
     }
-    setCurrentPage(1);
   };
 
   const sortedPatients = [...patients].sort((a, b) => {
@@ -68,9 +76,9 @@ export function PatientTable({ patients, pageSize = 10 }: PatientTableProps) {
     return sortDirection === "asc" ? comparison : -comparison;
   });
 
-  const totalPages = Math.ceil(sortedPatients.length / pageSize);
-  const startIndex = (currentPage - 1) * pageSize;
-  const paginatedPatients = sortedPatients.slice(startIndex, startIndex + pageSize);
+  const startIndex = (page - 1) * pageSize;
+  const shownFrom = total === 0 ? 0 : startIndex + 1;
+  const shownTo = Math.min(startIndex + patients.length, total);
 
   return (
     <div className="bg-card rounded-lg border border-border/50 shadow-sm overflow-hidden">
@@ -119,14 +127,14 @@ export function PatientTable({ patients, pageSize = 10 }: PatientTableProps) {
             </tr>
           </thead>
           <tbody>
-            {paginatedPatients.length === 0 ? (
+            {sortedPatients.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-12 text-center text-muted-foreground">
                   No patients found.
                 </td>
               </tr>
             ) : (
-              paginatedPatients.map((patient) => (
+              sortedPatients.map((patient) => (
                 <tr
                   key={patient.id}
                   className="border-b border-border/30 last:border-0 hover:bg-muted/20 transition-colors"
@@ -162,44 +170,47 @@ export function PatientTable({ patients, pageSize = 10 }: PatientTableProps) {
         </table>
       </div>
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between px-4 py-3 border-t border-border/50">
-          <p className="text-xs text-muted-foreground">
-            Showing {startIndex + 1}–{Math.min(startIndex + pageSize, sortedPatients.length)} of{" "}
-            {sortedPatients.length} patients
-          </p>
-          <div className="flex items-center gap-1">
+      <div className="flex items-center justify-between px-4 py-3 border-t border-border/50">
+        <p className="text-xs text-muted-foreground">
+          {total === 0
+            ? "No patients to show"
+            : `Showing ${shownFrom}–${shownTo} of ${total} patient${total !== 1 ? "s" : ""}`}
+        </p>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => onPageChange(Math.max(1, page - 1))}
+            disabled={page === 1}
+            aria-label="Previous page"
+            className="p-1.5 rounded-md hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
             <button
-              onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-              disabled={currentPage === 1}
-              className="p-1.5 rounded-md hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              key={p}
+              onClick={() => onPageChange(p)}
+              aria-label={`Page ${p}`}
+              aria-current={p === page ? "page" : undefined}
+              className={cn(
+                "px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
+                p === page
+                  ? "bg-primary text-primary-foreground"
+                  : "hover:bg-muted text-muted-foreground"
+              )}
             >
-              <ChevronLeft className="h-4 w-4" />
+              {p}
             </button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-              <button
-                key={page}
-                onClick={() => setCurrentPage(page)}
-                className={cn(
-                  "px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
-                  page === currentPage
-                    ? "bg-primary text-primary-foreground"
-                    : "hover:bg-muted text-muted-foreground"
-                )}
-              >
-                {page}
-              </button>
-            ))}
-            <button
-              onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-              disabled={currentPage === totalPages}
-              className="p-1.5 rounded-md hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
+          ))}
+          <button
+            onClick={() => onPageChange(Math.min(totalPages, page + 1))}
+            disabled={page >= totalPages}
+            aria-label="Next page"
+            className="p-1.5 rounded-md hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
         </div>
-      )}
+      </div>
     </div>
   );
 }
