@@ -40,3 +40,34 @@ export const pharmacyMedicineSearchSchema = z.object({
 });
 
 export type PharmacyMedicineSearchData = z.infer<typeof pharmacyMedicineSearchSchema>;
+
+export const dispenseSchema = z.object({
+  quantity: z
+    .number({ message: "Quantity must be a number" })
+    .int({ message: "Quantity must be an integer" })
+    .min(1, "Quantity must be at least 1"),
+});
+
+export type DispenseFormData = z.infer<typeof dispenseSchema>;
+
+export const prescriptionQueueQuerySchema = z.object({
+  query: z.string().max(200).optional(),
+  status: z
+    .enum(["All", "Active", "Completed", "Discontinued"], {
+      message: "Invalid prescription status",
+    })
+    .default("All"),
+  page: z.coerce
+    .number({ message: "Page must be a number" })
+    .int({ message: "Page must be an integer" })
+    .min(1, "Page must be at least 1")
+    .default(1),
+  pageSize: z.coerce
+    .number({ message: "Page size must be a number" })
+    .int({ message: "Page size must be an integer" })
+    .min(1, "Page size must be at least 1")
+    .max(100, "Page size must be at most 100")
+    .default(20),
+});
+
+export type PrescriptionQueueQuery = z.infer<typeof prescriptionQueueQuerySchema>;
