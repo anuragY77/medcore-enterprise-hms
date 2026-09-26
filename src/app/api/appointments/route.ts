@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, or, ilike, sql } from "drizzle-orm";
+import { z } from "zod";
+import { and, eq, or, ilike, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
 import { db, appointments } from "@/lib/db";
+import { paginationSchema } from "@/lib/validations/common";
 import { appointmentSchema } from "@/lib/validations/appointment";
 
 export async function GET(request: NextRequest) {
@@ -21,8 +23,41 @@ export async function GET(request: NextRequest) {
     const department = searchParams.get("department") || "";
     const doctorName = searchParams.get("doctorName") || "";
     const date = searchParams.get("date") || "";
-    const page = parseInt(searchParams.get("page") || "1", 10);
-    const pageSize = parseInt(searchParams.get("pageSize") || "20", 10);
+
+    const filterCheck = z
+      .object({
+        date: z
+          .string()
+          .refine(
+            (v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(new Date(v).getTime()),
+            { message: "Invalid date" }
+          )
+          .optional(),
+      })
+      .safeParse({
+        date: date || undefined,
+      });
+
+    if (!filterCheck.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: filterCheck.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
+
+    const pagination = paginationSchema().safeParse({
+      page: searchParams.get("page") || undefined,
+      pageSize: searchParams.get("pageSize") || undefined,
+    });
+
+    if (!pagination.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: pagination.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
+
+    const { page, pageSize } = pagination.data;
     const offset = (page - 1) * pageSize;
 
     const conditions = [];
@@ -53,7 +88,7 @@ export async function GET(request: NextRequest) {
       conditions.push(sql`DATE(${appointments.date}) = ${date}`);
     }
 
-    const whereClause = conditions.length > 0 ? sql`${conditions[0]}` : undefined;
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     const [countResult, appointmentsList] = await Promise.all([
       db

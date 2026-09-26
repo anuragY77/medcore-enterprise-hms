@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, or, ilike, sql } from "drizzle-orm";
+import { and, eq, or, ilike, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
 import { db, patients, beds, vitals } from "@/lib/db";
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
       conditions.push(eq(patients.status, status));
     }
 
-    const whereClause = conditions.length > 0 ? sql`${conditions[0]}` : undefined;
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     const patientsWithBeds = await db
       .select({

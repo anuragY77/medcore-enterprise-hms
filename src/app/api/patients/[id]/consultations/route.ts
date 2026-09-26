@@ -3,6 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
 import { db, consultations, patients } from "@/lib/db";
+import { paginationSchema, idParamSchema } from "@/lib/validations/common";
 import { consultationSchema } from "@/lib/validations/clinical";
 
 export async function GET(
@@ -20,6 +21,15 @@ export async function GET(
 
     const { id } = await params;
 
+    const idParsed = idParamSchema.safeParse({ id });
+
+    if (!idParsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: idParsed.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
+
     const [patient] = await db
       .select({ id: patients.id })
       .from(patients)
@@ -31,8 +41,19 @@ export async function GET(
     }
 
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get("page") || "1", 10);
-    const pageSize = parseInt(searchParams.get("pageSize") || "20", 10);
+    const pagination = paginationSchema().safeParse({
+      page: searchParams.get("page") || undefined,
+      pageSize: searchParams.get("pageSize") || undefined,
+    });
+
+    if (!pagination.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: pagination.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
+
+    const { page, pageSize } = pagination.data;
     const offset = (page - 1) * pageSize;
 
     const [countResult, consultationsList] = await Promise.all([
@@ -75,6 +96,15 @@ export async function POST(
     }
 
     const { id } = await params;
+
+    const idParsed = idParamSchema.safeParse({ id });
+
+    if (!idParsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: idParsed.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
 
     const [patient] = await db
       .select({ id: patients.id })

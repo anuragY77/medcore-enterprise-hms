@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
 import { db, users } from "@/lib/db";
 import { createUserSchema } from "@/lib/validations/user";
+import { paginationSchema } from "@/lib/validations/common";
 import { recordAudit } from "@/lib/audit";
 import bcrypt from "bcryptjs";
 
@@ -21,8 +22,20 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get("search") || "";
     const role = searchParams.get("role") || "";
     const department = searchParams.get("department") || "";
-    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
-    const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") || "20", 10)));
+    const pagination = paginationSchema().safeParse({
+      page: searchParams.get("page") || undefined,
+      pageSize: searchParams.get("pageSize") || undefined,
+    });
+
+    if (!pagination.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: pagination.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
+
+    const page = pagination.data.page;
+    const pageSize = Math.min(100, pagination.data.pageSize);
     const offset = (page - 1) * pageSize;
 
     const conditions = [];

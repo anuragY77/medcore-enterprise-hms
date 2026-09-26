@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
 import { db, pharmacyMedicines } from "@/lib/db";
+import { idParamSchema } from "@/lib/validations/common";
 import { pharmacyMedicineSchema } from "@/lib/validations/pharmacy";
 
 export async function GET(
@@ -19,6 +20,15 @@ export async function GET(
     }
 
     const { id } = await params;
+
+    const idParsed = idParamSchema.safeParse({ id });
+
+    if (!idParsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: idParsed.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
 
     const [medicine] = await db
       .select()
@@ -51,6 +61,15 @@ export async function PUT(
     }
 
     const { id } = await params;
+
+    const idParsed = idParamSchema.safeParse({ id });
+
+    if (!idParsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: idParsed.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
 
     const [existing] = await db
       .select({ id: pharmacyMedicines.id })
