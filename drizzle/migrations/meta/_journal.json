@@ -71,6 +71,13 @@
       "when": 1790348310042,
       "tag": "0009_sloppy_scarlet_spider",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790436947539,
+      "tag": "0010_square_silvermane",
+      "breakpoints": true
     }
   ]
 }

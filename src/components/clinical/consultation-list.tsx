@@ -19,9 +19,10 @@ interface Consultation {
 
 interface ConsultationListProps {
   patientId: string;
+  highlightId?: string;
 }
 
-export function ConsultationList({ patientId }: ConsultationListProps) {
+export function ConsultationList({ patientId, highlightId }: ConsultationListProps) {
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -65,7 +66,14 @@ export function ConsultationList({ patientId }: ConsultationListProps) {
   return (
     <div className="space-y-3">
       {consultations.map((consultation) => (
-        <Card key={consultation.id}>
+        <Card
+          key={consultation.id}
+          className={
+            highlightId && consultation.id === highlightId
+              ? "ring-2 ring-primary/60"
+              : undefined
+          }
+        >
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-medium">

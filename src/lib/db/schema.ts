@@ -66,6 +66,7 @@ export const patientMedications = pgTable("patient_medications", {
 export const consultations = pgTable("consultations", {
   id: uuid("id").defaultRandom().primaryKey(),
   patientId: uuid("patient_id").notNull().references(() => patients.id, { onDelete: "cascade" }),
+  appointmentId: uuid("appointment_id").references(() => appointments.id, { onDelete: "set null" }),
   doctorName: varchar("doctor_name", { length: 200 }).notNull(),
   chiefComplaint: varchar("chief_complaint", { length: 500 }).notNull(),
   diagnosis: text("diagnosis").notNull(),
@@ -74,7 +75,9 @@ export const consultations = pgTable("consultations", {
   followUpDate: timestamp("follow_up_date"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  appointmentIdIdx: index("consultations_appointment_id_idx").on(table.appointmentId),
+}));
 
 export const prescriptions = pgTable("prescriptions", {
   id: uuid("id").defaultRandom().primaryKey(),

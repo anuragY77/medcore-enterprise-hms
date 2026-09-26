@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
 import { AppointmentForm } from "@/components/appointments";
 import type { Appointment } from "@/components/appointments";
+import { ConsultationForm } from "@/components/clinical";
 
 export default function AppointmentDetailPage() {
   const params = useParams();
@@ -13,6 +14,7 @@ export default function AppointmentDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<"view" | "edit">("view");
+  const [showStart, setShowStart] = useState(false);
 
   useEffect(() => {
     const fetchAppointment = async () => {
@@ -97,6 +99,9 @@ export default function AppointmentDetailPage() {
     );
   }
 
+  const canStartConsultation =
+    appointment.status === "Scheduled" || appointment.status === "Confirmed";
+
   return (
     <div>
       <Breadcrumb
@@ -115,6 +120,14 @@ export default function AppointmentDetailPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {canStartConsultation && (
+            <button
+              onClick={() => setShowStart((v) => !v)}
+              className="px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+            >
+              {showStart ? "Cancel" : "Start Consultation"}
+            </button>
+          )}
           <button
             onClick={() => setMode("edit")}
             className="px-3 py-1.5 rounded-md border border-border/50 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
@@ -129,6 +142,26 @@ export default function AppointmentDetailPage() {
           </button>
         </div>
       </div>
+
+      {showStart && canStartConsultation && (
+        <div className="mb-6">
+          <ConsultationForm
+            patientId={appointment.patientId}
+            appointmentId={appointment.id}
+            appointmentContext={{
+              appointmentCode: appointment.appointmentId,
+              doctorName: appointment.doctorName,
+            }}
+            onSuccess={(createdId) =>
+              router.push(
+                `/patients/${appointment.patientId}/consultation${
+                  createdId ? `?created=${encodeURIComponent(createdId)}` : ""
+                }`
+              )
+            }
+          />
+        </div>
+      )}
 
       <div className="bg-card rounded-lg border border-border/50 p-6 shadow-sm">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
