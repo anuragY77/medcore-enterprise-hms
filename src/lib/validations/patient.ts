@@ -1,9 +1,16 @@
 import { z } from "zod";
 
+export const patientDateOfBirthSchema = z
+  .string()
+  .min(1, "Date of birth is required")
+  .refine((v) => !Number.isNaN(new Date(v).getTime()), {
+    message: "Invalid date of birth",
+  });
+
 export const patientSchema = z.object({
   firstName: z.string().min(1, "First name is required").max(100),
   lastName: z.string().min(1, "Last name is required").max(100),
-  dateOfBirth: z.string().min(1, "Date of birth is required"),
+  dateOfBirth: patientDateOfBirthSchema,
   gender: z.enum(["Male", "Female", "Other"], {
     message: "Gender is required",
   }),
@@ -21,6 +28,8 @@ export const patientSchema = z.object({
 });
 
 export type PatientFormData = z.infer<typeof patientSchema>;
+
+export const updatePatientSchema = patientSchema.partial();
 
 export const patientSearchSchema = z.object({
   query: z.string().optional(),

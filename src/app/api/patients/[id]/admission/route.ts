@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
 import { db, patients, medicalRecords } from "@/lib/db";
+import { idParamSchema } from "@/lib/validations/common";
 import { admissionSchema } from "@/lib/validations/clinical";
 
 export async function POST(
@@ -19,6 +20,15 @@ export async function POST(
     }
 
     const { id } = await params;
+
+    const idParsed = idParamSchema.safeParse({ id });
+
+    if (!idParsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: idParsed.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
 
     const [patient] = await db
       .select()

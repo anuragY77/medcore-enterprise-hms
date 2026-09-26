@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, or, ilike, sql } from "drizzle-orm";
+import { z } from "zod";
+import { and, eq, or, ilike, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
 import { db, surgeries } from "@/lib/db";
+import { paginationSchema } from "@/lib/validations/common";
 import { surgerySchema } from "@/lib/validations/surgery";
 
 export async function GET(request: NextRequest) {
@@ -22,8 +24,37 @@ export async function GET(request: NextRequest) {
     const surgeonId = searchParams.get("surgeonId") || "";
     const patientId = searchParams.get("patientId") || "";
     const department = searchParams.get("department") || "";
-    const page = parseInt(searchParams.get("page") || "1", 10);
-    const pageSize = parseInt(searchParams.get("pageSize") || "20", 10);
+
+    const filterCheck = z
+      .object({
+        surgeonId: z.string().uuid("Invalid surgeon ID").optional(),
+        patientId: z.string().uuid("Invalid patient ID").optional(),
+      })
+      .safeParse({
+        surgeonId: surgeonId || undefined,
+        patientId: patientId || undefined,
+      });
+
+    if (!filterCheck.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: filterCheck.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
+
+    const pagination = paginationSchema().safeParse({
+      page: searchParams.get("page") || undefined,
+      pageSize: searchParams.get("pageSize") || undefined,
+    });
+
+    if (!pagination.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: pagination.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
+
+    const { page, pageSize } = pagination.data;
     const offset = (page - 1) * pageSize;
 
     const conditions = [];
@@ -58,7 +89,7 @@ export async function GET(request: NextRequest) {
       conditions.push(eq(surgeries.department, department));
     }
 
-    const whereClause = conditions.length > 0 ? sql`${conditions[0]}` : undefined;
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     const [countResult, surgeriesList] = await Promise.all([
       db

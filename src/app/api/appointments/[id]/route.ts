@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
 import { db, appointments } from "@/lib/db";
+import { idParamSchema } from "@/lib/validations/common";
 import { appointmentSchema } from "@/lib/validations/appointment";
 
 export async function GET(
@@ -19,6 +20,15 @@ export async function GET(
     }
 
     const { id } = await params;
+
+    const idParsed = idParamSchema.safeParse({ id });
+
+    if (!idParsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: idParsed.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
 
     const [appointment] = await db
       .select()
@@ -51,6 +61,15 @@ export async function PUT(
     }
 
     const { id } = await params;
+
+    const idParsed = idParamSchema.safeParse({ id });
+
+    if (!idParsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: idParsed.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
 
     const [existing] = await db
       .select({ id: appointments.id })
@@ -111,6 +130,15 @@ export async function DELETE(
     }
 
     const { id } = await params;
+
+    const idParsed = idParamSchema.safeParse({ id });
+
+    if (!idParsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: idParsed.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
 
     const [deletedAppointment] = await db
       .delete(appointments)

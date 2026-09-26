@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, or, ilike, sql } from "drizzle-orm";
+import { and, eq, or, ilike, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
 import { db, beds } from "@/lib/db";
+import { paginationSchema } from "@/lib/validations/common";
 import { bedSchema } from "@/lib/validations/bed";
 
 export async function GET(request: NextRequest) {
@@ -21,8 +22,19 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get("status") || "All";
     const type = searchParams.get("type") || "All";
     const roomNumber = searchParams.get("roomNumber") || "";
-    const page = parseInt(searchParams.get("page") || "1", 10);
-    const pageSize = parseInt(searchParams.get("pageSize") || "20", 10);
+    const pagination = paginationSchema().safeParse({
+      page: searchParams.get("page") || undefined,
+      pageSize: searchParams.get("pageSize") || undefined,
+    });
+
+    if (!pagination.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: pagination.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
+
+    const { page, pageSize } = pagination.data;
     const offset = (page - 1) * pageSize;
 
     const conditions = [];
@@ -54,7 +66,7 @@ export async function GET(request: NextRequest) {
       conditions.push(eq(beds.roomNumber, roomNumber));
     }
 
-    const whereClause = conditions.length > 0 ? sql`${conditions[0]}` : undefined;
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     const [countResult, bedsList] = await Promise.all([
       db

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, or, ilike, sql } from "drizzle-orm";
+import { z } from "zod";
+import { and, eq, or, ilike, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
 import { db, emergencyCases } from "@/lib/db";
+import { paginationSchema } from "@/lib/validations/common";
 import { emergencyCaseSchema } from "@/lib/validations/emergency";
 
 export async function GET(request: NextRequest) {
@@ -21,8 +23,39 @@ export async function GET(request: NextRequest) {
     const triageLevel = searchParams.get("triageLevel") || "";
     const patientId = searchParams.get("patientId") || "";
     const doctorId = searchParams.get("doctorId") || "";
-    const page = parseInt(searchParams.get("page") || "1", 10);
-    const pageSize = parseInt(searchParams.get("pageSize") || "20", 10);
+
+    const filterCheck = z
+      .object({
+        triageLevel: z.coerce.number().int().min(1, "Invalid triage level").optional(),
+        patientId: z.string().uuid("Invalid patient ID").optional(),
+        doctorId: z.string().uuid("Invalid doctor ID").optional(),
+      })
+      .safeParse({
+        triageLevel: triageLevel || undefined,
+        patientId: patientId || undefined,
+        doctorId: doctorId || undefined,
+      });
+
+    if (!filterCheck.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: filterCheck.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
+
+    const pagination = paginationSchema().safeParse({
+      page: searchParams.get("page") || undefined,
+      pageSize: searchParams.get("pageSize") || undefined,
+    });
+
+    if (!pagination.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: pagination.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
+
+    const { page, pageSize } = pagination.data;
     const offset = (page - 1) * pageSize;
 
     const conditions = [];
@@ -52,7 +85,7 @@ export async function GET(request: NextRequest) {
       conditions.push(eq(emergencyCases.doctorId, doctorId));
     }
 
-    const whereClause = conditions.length > 0 ? sql`${conditions[0]}` : undefined;
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     const [countResult, casesList] = await Promise.all([
       db

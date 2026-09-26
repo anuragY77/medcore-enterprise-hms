@@ -3,6 +3,8 @@ import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
 import { db, patients, patientAllergies, patientConditions, patientMedications } from "@/lib/db";
+import { idParamSchema } from "@/lib/validations/common";
+import { updatePatientSchema } from "@/lib/validations/patient";
 
 export async function GET(
   request: NextRequest,
@@ -18,6 +20,15 @@ export async function GET(
     }
 
     const { id } = await params;
+
+    const idParsed = idParamSchema.safeParse({ id });
+
+    if (!idParsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: idParsed.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
 
     const [patient] = await db
       .select()
@@ -67,13 +78,34 @@ export async function PUT(
     }
 
     const { id } = await params;
+
+    const idParsed = idParamSchema.safeParse({ id });
+
+    if (!idParsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: idParsed.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
+
     const body = await request.json();
+    const parsed = updatePatientSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: parsed.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
+
+    const { dateOfBirth, status, ...rest } = parsed.data;
 
     const [updatedPatient] = await db
       .update(patients)
       .set({
-        ...body,
-        dateOfBirth: body.dateOfBirth ? new Date(body.dateOfBirth) : undefined,
+        ...rest,
+        ...(dateOfBirth ? { dateOfBirth: new Date(dateOfBirth) } : {}),
+        ...(status !== undefined && "status" in body ? { status } : {}),
         updatedAt: new Date(),
       })
       .where(eq(patients.id, id))
@@ -110,6 +142,15 @@ export async function DELETE(
     }
 
     const { id } = await params;
+
+    const idParsed = idParamSchema.safeParse({ id });
+
+    if (!idParsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: idParsed.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
 
     const [deletedPatient] = await db
       .delete(patients)

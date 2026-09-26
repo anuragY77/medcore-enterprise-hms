@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, or, ilike, sql } from "drizzle-orm";
+import { and, eq, or, ilike, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
 import { db, inventoryItems } from "@/lib/db";
+import { paginationSchema } from "@/lib/validations/common";
 import { inventoryItemSchema } from "@/lib/validations/inventory";
 
 export async function GET(request: NextRequest) {
@@ -21,8 +22,19 @@ export async function GET(request: NextRequest) {
     const category = searchParams.get("category") || "";
     const supplier = searchParams.get("supplier") || "";
     const location = searchParams.get("location") || "";
-    const page = parseInt(searchParams.get("page") || "1", 10);
-    const pageSize = parseInt(searchParams.get("pageSize") || "20", 10);
+    const pagination = paginationSchema().safeParse({
+      page: searchParams.get("page") || undefined,
+      pageSize: searchParams.get("pageSize") || undefined,
+    });
+
+    if (!pagination.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: pagination.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
+
+    const { page, pageSize } = pagination.data;
     const offset = (page - 1) * pageSize;
 
     const conditions = [];
@@ -55,7 +67,7 @@ export async function GET(request: NextRequest) {
       conditions.push(eq(inventoryItems.location, location));
     }
 
-    const whereClause = conditions.length > 0 ? sql`${conditions[0]}` : undefined;
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     const [countResult, itemsList] = await Promise.all([
       db

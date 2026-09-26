@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
 import { db, users } from "@/lib/db";
 import { updateUserSchema, userIdSchema } from "@/lib/validations/user";
+import { idParamSchema } from "@/lib/validations/common";
 import { recordAudit } from "@/lib/audit";
 
 const SAFE_USER_FIELDS = {
@@ -41,6 +42,15 @@ export async function GET(
     }
 
     const { id } = await params;
+
+    const idParsed = idParamSchema.safeParse({ id });
+
+    if (!idParsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: idParsed.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
 
     const [user] = await db
       .select(SAFE_USER_FIELDS)
