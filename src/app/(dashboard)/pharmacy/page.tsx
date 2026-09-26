@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Plus, Pill, AlertTriangle, PackageX, RefreshCw } from "lucide-react";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
-import { MedicineTable, MedicineForm, type Medicine } from "@/components/pharmacy";
+import { MedicineTable, MedicineForm, PrescriptionQueue, type Medicine } from "@/components/pharmacy";
 
 const CATEGORIES = [
   "Analgesics",
@@ -36,9 +36,11 @@ export default function PharmacyPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingMedicine, setEditingMedicine] = useState<Medicine | undefined>(undefined);
 
-  const fetchMedicines = useCallback(async () => {
+  const fetchMedicines = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       const params = new URLSearchParams();
       if (searchQuery) params.set("query", searchQuery);
       if (statusFilter !== "All") params.set("status", statusFilter);
@@ -202,7 +204,7 @@ export default function PharmacyPage() {
           </button>
           <button
             type="button"
-            onClick={fetchMedicines}
+            onClick={() => fetchMedicines()}
             className="px-3 py-2 rounded-md border border-border/50 text-sm text-muted-foreground hover:bg-muted transition-colors"
           >
             <RefreshCw className="h-4 w-4" />
@@ -219,6 +221,18 @@ export default function PharmacyPage() {
       {!loading && !error && (
         <MedicineTable medicines={medicines} onEdit={handleEdit} />
       )}
+
+      <div className="mt-8">
+        <div className="mb-3">
+          <h2 className="text-lg font-semibold text-foreground">
+            Prescription Queue
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Verify stock and dispense active prescriptions
+          </p>
+        </div>
+        <PrescriptionQueue onDispensed={() => fetchMedicines(true)} />
+      </div>
 
       <MedicineForm
         open={formOpen}
