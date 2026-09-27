@@ -17,6 +17,7 @@ import {
   FileText,
   ClipboardList,
   Receipt,
+  BedDouble,
 } from "lucide-react";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
 import { cn } from "@/lib/utils";
@@ -46,6 +47,22 @@ type BillingSummary = {
   outstanding: number;
   claimCount: number;
   approvedTotal: number;
+  status: "ok" | "restricted" | "failed";
+};
+
+type InpatientBed = {
+  id: string;
+  bedId: string;
+  roomNumber: string;
+  ward: string | null;
+  department: string;
+  type: string;
+  status: string;
+  updatedAt: string;
+};
+
+type InpatientSummary = {
+  bed: InpatientBed | null;
   status: "ok" | "restricted" | "failed";
 };
 
@@ -115,6 +132,38 @@ export default function PatientRecordPage({ params }: { params: Promise<{ id: st
   }, [fetchPatient]);
 
   const [billingSummary, setBillingSummary] = useState<BillingSummary | null>(null);
+  const [inpatient, setInpatient] = useState<InpatientSummary | null>(null);
+
+  useEffect(() => {
+    if (!patient?.id) return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch(`/api/beds?patientId=${patient.id}`);
+        if (cancelled) return;
+        if (res.status === 403) {
+          setInpatient({ bed: null, status: "restricted" });
+          return;
+        }
+        if (!res.ok) {
+          setInpatient({ bed: null, status: "failed" });
+          return;
+        }
+        const payload = await res.json();
+        const row = Array.isArray(payload.data)
+          ? (payload.data as InpatientBed[])[0]
+          : undefined;
+        setInpatient({ bed: row ?? null, status: "ok" });
+      } catch {
+        if (!cancelled) setInpatient({ bed: null, status: "failed" });
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [patient?.id, patient?.status]);
+
 
   useEffect(() => {
     if (!patient?.id) return;
@@ -423,6 +472,93 @@ export default function PatientRecordPage({ params }: { params: Promise<{ id: st
               <InfoRow icon={Shield} label="Provider" value={patient.insuranceProvider} />
               <InfoRow icon={FileText} label="Policy #" value={patient.insurancePolicyNumber} />
             </div>
+          </div>
+
+          <div className="bg-card rounded-lg border border-border/50 p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-foreground font-headline mb-4 flex items-center gap-2">
+              <BedDouble className="h-5 w-5 text-primary" />
+              Inpatient &amp; Bed
+            </h2>
+            {inpatient === null ? (
+              <p className="text-sm text-muted-foreground">Loading bed assignment...</p>
+            ) : inpatient.status === "restricted" ? (
+              <p className="text-sm text-muted-foreground">
+                You do not have permission to view bed assignments.
+              </p>
+            ) : inpatient.status === "failed" ? (
+              <p className="text-sm text-muted-foreground">Unable to load bed assignment.</p>
+            ) : (
+              <div className="space-y-3 text-sm">
+                {inpatient.bed ? (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Bed</span>
+                      <span className="text-foreground font-medium">
+                        {inpatient.bed.bedId}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Room</span>
+                      <span className="text-foreground font-medium">
+                        {inpatient.bed.roomNumber}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Ward</span>
+                      <span className="text-foreground font-medium">
+                        {inpatient.bed.ward ?? "—"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Bed Type</span>
+                      <span className="text-foreground font-medium">
+                        {inpatient.bed.type}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Status</span>
+                      <span className="text-foreground font-medium">
+                        {inpatient.bed.status}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Since</span>
+                      <span className="text-foreground font-medium">
+                        {new Date(inpatient.bed.updatedAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No active bed assignment.
+                  </p>
+                )}
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {!inpatient.bed && (
+                    <Link
+                      href={`/patients/${patient.id}/admission`}
+                      className="px-3 py-1.5 rounded-md border border-border/50 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+                    >
+                      Admit Patient
+                    </Link>
+                  )}
+                  {patient.status !== "Discharged" && (
+                    <Link
+                      href={`/patients/${patient.id}/discharge`}
+                      className="px-3 py-1.5 rounded-md border border-border/50 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+                    >
+                      Discharge
+                    </Link>
+                  )}
+                  <Link
+                    href="/beds"
+                    className="px-3 py-1.5 rounded-md border border-border/50 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+                  >
+                    View Beds
+                  </Link>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="bg-card rounded-lg border border-border/50 p-6 shadow-sm">

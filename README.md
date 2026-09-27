@@ -20,13 +20,14 @@ A production-ready, full-stack Hospital Management System built with Next.js 16,
 - Patient management with allergies, conditions, and medications tracking
 - Clinical workflows: consultations, prescriptions, medical records, vitals
 - Staff management and scheduling
-- Appointments, departments, and bed management
+- Appointments, departments, and inpatient bed management
+- Inpatient bed lifecycle: admission, bed assignment, discharge, and bed release with occupancy guards and a full audit trail
 - Pharmacy and inventory management
 - Laboratory and diagnostics
 - Billing, invoicing, and insurance claims
 - Surgery and operating theater scheduling
 - Emergency department command center with triage management
-- Nurse Station Dashboard with ward patient visibility, task queue, shift summary, and quick actions
+- Nurse Station Dashboard with ward patient visibility, task queue, live shift admission/discharge metrics, and quick actions
 - Responsive design with dark/light mode support
 
 ## Getting Started

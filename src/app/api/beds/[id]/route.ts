@@ -1,10 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
-import { db, beds } from "@/lib/db";
+import { db, beds, patients } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
 import { bedSchema } from "@/lib/validations/bed";
+
+const BED_SELECT = {
+  id: beds.id,
+  bedId: beds.bedId,
+  roomNumber: beds.roomNumber,
+  department: beds.department,
+  ward: beds.ward,
+  type: beds.type,
+  status: beds.status,
+  patientId: beds.patientId,
+  createdAt: beds.createdAt,
+  updatedAt: beds.updatedAt,
+  patientName: sql<string | null>`concat(${patients.firstName}, ' ', ${patients.lastName})`,
+  patientNumber: patients.patientId,
+};
 
 export async function GET(
   request: NextRequest,
@@ -31,8 +46,9 @@ export async function GET(
     }
 
     const [bed] = await db
-      .select()
+      .select(BED_SELECT)
       .from(beds)
+      .leftJoin(patients, eq(beds.patientId, patients.id))
       .where(eq(beds.id, id))
       .limit(1);
 
@@ -71,17 +87,13 @@ export async function PUT(
       );
     }
 
-    const [existing] = await db
-      .select({ id: beds.id })
-      .from(beds)
-      .where(eq(beds.id, id))
-      .limit(1);
-
-    if (!existing) {
-      return NextResponse.json({ error: "Bed not found" }, { status: 404 });
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Validation failed", details: { body: ["Invalid JSON"] } }, { status: 400 });
     }
 
-    const body = await request.json();
     const parsed = bedSchema.partial().safeParse(body);
 
     if (!parsed.success) {
@@ -91,22 +103,61 @@ export async function PUT(
       );
     }
 
-    const [updatedBed] = await db
-      .update(beds)
-      .set({
-        ...parsed.data,
-        roomNumber: parsed.data.roomNumber ?? undefined,
-        department: parsed.data.department ?? undefined,
-        ward: parsed.data.ward ?? undefined,
-        type: parsed.data.type ?? undefined,
-        status: parsed.data.status ?? undefined,
-        patientId: parsed.data.patientId ?? undefined,
-        updatedAt: new Date(),
-      })
-      .where(eq(beds.id, id))
-      .returning();
+    const data = parsed.data;
 
-    return NextResponse.json(updatedBed);
+    const result = await db.transaction(async (tx) => {
+      const [existing] = await tx
+        .select()
+        .from(beds)
+        .where(eq(beds.id, id))
+        .limit(1)
+        .for("update");
+
+      if (!existing) {
+        return { kind: "error" as const, status: 404, error: "Bed not found" };
+      }
+
+      const nextPatientId =
+        data.patientId !== undefined ? data.patientId : existing.patientId;
+      const nextStatus = data.status !== undefined ? data.status : existing.status;
+
+      if (nextPatientId !== existing.patientId) {
+        return {
+          kind: "error" as const,
+          status: 409,
+          error: "Use the bed assignment and discharge workflow to change occupancy",
+        };
+      }
+
+      if (nextStatus !== existing.status && (nextStatus === "Occupied" || existing.status === "Occupied")) {
+        return {
+          kind: "error" as const,
+          status: 409,
+          error: "Use the bed assignment and release workflow to change occupancy",
+        };
+      }
+
+      const [updatedBed] = await tx
+        .update(beds)
+        .set({
+          roomNumber: data.roomNumber ?? undefined,
+          department: data.department ?? undefined,
+          ward: data.ward ?? undefined,
+          type: data.type ?? undefined,
+          status: data.status ?? undefined,
+          updatedAt: new Date(),
+        })
+        .where(eq(beds.id, id))
+        .returning();
+
+      return { kind: "ok" as const, bed: updatedBed };
+    });
+
+    if (result.kind === "error") {
+      return NextResponse.json({ error: result.error }, { status: result.status });
+    }
+
+    return NextResponse.json(result.bed);
   } catch (error) {
     console.error("Failed to update bed:", error);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });

@@ -1,8 +1,17 @@
 import { NextResponse } from "next/server";
-import { sql, eq } from "drizzle-orm";
+import { sql, eq, and, gte, lt } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
-import { db, patients, beds, prescriptions, emergencyCases } from "@/lib/db";
+import { db, patients, beds, prescriptions, emergencyCases, medicalRecords } from "@/lib/db";
+
+function startOfDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function startOfNextDay(date: Date): Date {
+  const s = startOfDay(date);
+  return new Date(s.getFullYear(), s.getMonth(), s.getDate() + 1);
+}
 
 export async function GET() {
   try {
@@ -14,25 +23,44 @@ export async function GET() {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const [patientsAssignedResult] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(beds)
-      .innerJoin(patients, eq(beds.patientId, patients.id));
+    const now = new Date();
+    const todayStart = startOfDay(now);
+    const todayEnd = startOfNextDay(now);
 
-    const [medsDueResult] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(prescriptions)
-      .where(eq(prescriptions.status, "Active"));
+    const [patientsAssignedResult, medsDueResult, alertsResult, shiftResult] =
+      await Promise.all([
+        db
+          .select({ count: sql<number>`count(*)` })
+          .from(beds)
+          .innerJoin(patients, eq(beds.patientId, patients.id)),
+        db
+          .select({ count: sql<number>`count(*)` })
+          .from(prescriptions)
+          .where(eq(prescriptions.status, "Active")),
+        db
+          .select({ count: sql<number>`count(*)` })
+          .from(emergencyCases)
+          .where(eq(emergencyCases.status, "Waiting")),
+        db
+          .select({
+            admissionsToday: sql<number>`count(*) filter (where ${medicalRecords.title} = 'Patient Admission')`,
+            dischargesToday: sql<number>`count(*) filter (where ${medicalRecords.recordType} = 'Discharge')`,
+          })
+          .from(medicalRecords)
+          .where(
+            and(
+              gte(medicalRecords.recordDate, todayStart),
+              lt(medicalRecords.recordDate, todayEnd)
+            )
+          ),
+      ]);
 
-    const [alertsResult] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(emergencyCases)
-      .where(eq(emergencyCases.status, "Waiting"));
-
-    const patientsAssigned = Number(patientsAssignedResult?.count ?? 0);
-    const medsDue = Number(medsDueResult?.count ?? 0);
-    const alerts = Number(alertsResult?.count ?? 0);
+    const patientsAssigned = Number(patientsAssignedResult?.[0]?.count ?? 0);
+    const medsDue = Number(medsDueResult?.[0]?.count ?? 0);
+    const alerts = Number(alertsResult?.[0]?.count ?? 0);
     const pendingTasks = medsDue + alerts;
+    const admissionsToday = Number(shiftResult?.[0]?.admissionsToday ?? 0);
+    const dischargesToday = Number(shiftResult?.[0]?.dischargesToday ?? 0);
 
     return NextResponse.json({
       data: {
@@ -40,6 +68,8 @@ export async function GET() {
         pendingTasks,
         medsDue,
         alerts,
+        admissionsToday,
+        dischargesToday,
       },
     });
   } catch (error) {

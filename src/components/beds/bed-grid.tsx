@@ -12,12 +12,17 @@ export interface Bed {
   type: string;
   status: string;
   patientId: string | null;
+  patientName: string | null;
+  patientNumber: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
 interface BedGridProps {
   beds: Bed[];
+  canWrite?: boolean;
+  onAssign?: (bed: Bed) => void;
+  onRelease?: (bed: Bed) => void;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -34,7 +39,7 @@ const TYPE_ICONS: Record<string, string> = {
   "Semi-Private": "text-blue-600",
 };
 
-export function BedGrid({ beds }: BedGridProps) {
+export function BedGrid({ beds, canWrite, onAssign, onRelease }: BedGridProps) {
   if (beds.length === 0) {
     return (
       <div className="bg-card rounded-lg border border-border/50 p-12 shadow-sm text-center text-muted-foreground">
@@ -85,7 +90,32 @@ export function BedGrid({ beds }: BedGridProps) {
           {bed.patientId && (
             <div className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
               <User className="h-3 w-3" />
-              <span className="truncate">Patient assigned</span>
+              <span className="truncate">
+                {bed.patientName
+                  ? `${bed.patientName}${bed.patientNumber ? ` · ${bed.patientNumber}` : ""}`
+                  : "Patient assigned"}
+              </span>
+            </div>
+          )}
+
+          {canWrite && (
+            <div className="mt-3">
+              {bed.status === "Available" && onAssign && (
+                <button
+                  onClick={() => onAssign(bed)}
+                  className="w-full px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
+                >
+                  Assign Patient
+                </button>
+              )}
+              {bed.status === "Occupied" && onRelease && (
+                <button
+                  onClick={() => onRelease(bed)}
+                  className="w-full px-3 py-1.5 rounded-md border border-border/50 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+                >
+                  Release Bed
+                </button>
+              )}
             </div>
           )}
         </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
 import {
@@ -18,6 +19,8 @@ interface DashboardStats {
   pendingTasks: number;
   medsDue: number;
   alerts: number;
+  admissionsToday: number;
+  dischargesToday: number;
 }
 
 interface Filters {
@@ -38,7 +41,7 @@ function buildTasks(patientList: WardPatient[]): TaskItem[] {
   const items: TaskItem[] = [];
   let id = 1;
   for (const p of patientList) {
-    if (p.status === "Admitted" || p.status === "Active") {
+    if (p.status === "Active" || p.status === "Critical" || p.status === "In Progress") {
       items.push({
         id: String(id++),
         type: "medication",
@@ -56,6 +59,7 @@ function buildTasks(patientList: WardPatient[]): TaskItem[] {
 }
 
 export default function NursingPage() {
+  const router = useRouter();
   const [patients, setPatients] = useState<WardPatient[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [stats, setStats] = useState<DashboardStats>({
@@ -63,8 +67,10 @@ export default function NursingPage() {
     pendingTasks: 0,
     medsDue: 0,
     alerts: 0,
+    admissionsToday: 0,
+    dischargesToday: 0,
   });
-  const [shiftData, setShiftData] = useState({ admissions: 0, discharges: 0, transfers: 0 });
+  const [shiftData, setShiftData] = useState({ admissions: 0, discharges: 0, occupied: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,30 +78,50 @@ export default function NursingPage() {
   const [wardFilter, setWardFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
 
-  const loadDashboard = useCallback(async (filters: Filters) => {
-    try {
-      setLoading(true);
-      setError(null);
-      const params = buildParams(filters);
-      const [patientsRes, statsRes] = await Promise.all([
-        fetch(`/api/nursing/ward-patients?${params.toString()}`),
-        fetch("/api/nursing/dashboard-stats"),
-      ]);
-      if (!patientsRes.ok) throw new Error("Failed to fetch ward patients");
-      if (!statsRes.ok) throw new Error("Failed to fetch dashboard stats");
-      const patientsData = await patientsRes.json();
-      const statsData = await statsRes.json();
-      const patientList: WardPatient[] = patientsData.data || [];
-      setPatients(patientList);
-      setStats(statsData.data);
-      setTasks(buildTasks(patientList));
-      setShiftData({ admissions: patientList.length, discharges: 0, transfers: 0 });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load dashboard");
-    } finally {
-      setLoading(false);
-    }
+  const applyResults = useCallback((patientList: WardPatient[], statsData: DashboardStats) => {
+    setPatients(patientList);
+    setStats(statsData);
+    setTasks(buildTasks(patientList));
+    setShiftData({
+      admissions: Number(statsData.admissionsToday ?? 0),
+      discharges: Number(statsData.dischargesToday ?? 0),
+      occupied: patientList.filter((p) => p.bedStatus === "Occupied").length,
+    });
   }, []);
+
+  const loadDashboard = useCallback(
+    async (filters: Filters) => {
+      try {
+        setLoading(true);
+        setError(null);
+        const params = buildParams(filters);
+        params.set("pageSize", "100");
+        const [patientsRes, statsRes] = await Promise.all([
+          fetch(`/api/nursing/ward-patients?${params.toString()}`),
+          fetch("/api/nursing/dashboard-stats"),
+        ]);
+        if (patientsRes.status === 401 || statsRes.status === 401) {
+          router.push("/login?callbackUrl=/nursing");
+          return;
+        }
+        if (!patientsRes.ok || !statsRes.ok) {
+          throw new Error(
+            patientsRes.status === 403 || statsRes.status === 403
+              ? "You do not have permission to view the nurse station."
+              : "Failed to load dashboard"
+          );
+        }
+        const patientsData = await patientsRes.json();
+        const statsData = await statsRes.json();
+        applyResults(patientsData.data || [], statsData.data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load dashboard");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [applyResults, router]
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -104,18 +130,16 @@ export default function NursingPage() {
         setLoading(true);
         setError(null);
         const [patientsRes, statsRes] = await Promise.all([
-          fetch("/api/nursing/ward-patients", { signal: controller.signal }),
+          fetch("/api/nursing/ward-patients?pageSize=100", { signal: controller.signal }),
           fetch("/api/nursing/dashboard-stats", { signal: controller.signal }),
         ]);
-        if (!patientsRes.ok) throw new Error("Failed to fetch ward patients");
-        if (!statsRes.ok) throw new Error("Failed to fetch dashboard stats");
+        if (patientsRes.status === 403 || statsRes.status === 403) {
+          throw new Error("You do not have permission to view the nurse station.");
+        }
+        if (!patientsRes.ok || !statsRes.ok) throw new Error("Failed to load dashboard");
         const patientsData = await patientsRes.json();
         const statsData = await statsRes.json();
-        const patientList: WardPatient[] = patientsData.data || [];
-        setPatients(patientList);
-        setStats(statsData.data);
-        setTasks(buildTasks(patientList));
-        setShiftData({ admissions: patientList.length, discharges: 0, transfers: 0 });
+        applyResults(patientsData.data || [], statsData.data);
       } catch (err) {
         if (controller.signal.aborted) return;
         setError(err instanceof Error ? err.message : "Failed to load dashboard");
@@ -125,7 +149,7 @@ export default function NursingPage() {
     }
     init();
     return () => controller.abort();
-  }, []);
+  }, [applyResults]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -186,8 +210,8 @@ export default function NursingPage() {
           >
             <option value="All">All Status</option>
             <option value="Active">Active</option>
-            <option value="Admitted">Admitted</option>
-            <option value="Observation">Observation</option>
+            <option value="Critical">Critical</option>
+            <option value="In Progress">In Progress</option>
             <option value="Discharged">Discharged</option>
           </select>
           <button
@@ -214,7 +238,7 @@ export default function NursingPage() {
           <ShiftSummary
             admissions={shiftData.admissions}
             discharges={shiftData.discharges}
-            transfers={shiftData.transfers}
+            occupied={shiftData.occupied}
             loading={loading}
           />
           <QuickActions patients={patients} />
