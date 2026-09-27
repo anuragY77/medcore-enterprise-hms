@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { and, eq, or, ilike, sql } from "drizzle-orm";
+import { and, eq, or, ilike, sql, inArray } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
-import { db, insuranceClaims } from "@/lib/db";
+import { db, insuranceClaims, patients, invoices } from "@/lib/db";
 import { paginationSchema } from "@/lib/validations/common";
 import { insuranceClaimSchema } from "@/lib/validations/insurance";
+import { isUniqueViolation } from "@/lib/billing";
+import { recordAudit } from "@/lib/audit";
+
+const ACTIVE_CLAIM_STATUSES = ["Submitted", "Processing", "Approved"];
 
 export async function GET(request: NextRequest) {
   try {
@@ -131,32 +135,171 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const claimCount = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(insuranceClaims);
+    const data = parsed.data;
 
-    const nextNumber = Number(claimCount[0]?.count ?? 0) + 1;
-    const claimId = `CLM-${String(nextNumber).padStart(3, "0")}`;
+    if (data.approvedAmount !== undefined && data.approvedAmount !== null) {
+      if (data.approvedAmount > data.claimAmount) {
+        return NextResponse.json(
+          { error: "Approved amount cannot exceed claim amount" },
+          { status: 400 }
+        );
+      }
 
-    const [newClaim] = await db
-      .insert(insuranceClaims)
-      .values({
-        claimId,
-        patientId: parsed.data.patientId,
-        invoiceId: parsed.data.invoiceId || null,
-        providerName: parsed.data.providerName,
-        policyNumber: parsed.data.policyNumber,
-        claimAmount: parsed.data.claimAmount,
-        approvedAmount: parsed.data.approvedAmount ?? null,
-        status: parsed.data.status,
-        diagnosis: parsed.data.diagnosis || null,
-        treatmentCode: parsed.data.treatmentCode || null,
-        submittedDate: parsed.data.submittedDate ? new Date(parsed.data.submittedDate) : null,
-        processedDate: parsed.data.processedDate ? new Date(parsed.data.processedDate) : null,
-        denialReason: parsed.data.denialReason || null,
-        notes: parsed.data.notes || null,
-      })
-      .returning();
+      if (data.status === "Denied" && data.approvedAmount > 0) {
+        return NextResponse.json(
+          { error: "Denied claims cannot have an approved amount" },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (data.status === "Approved" && (data.approvedAmount === undefined || data.approvedAmount === null)) {
+      return NextResponse.json(
+        { error: "Approved claims require an approved amount" },
+        { status: 400 }
+      );
+    }
+
+    const [patient] = await db
+      .select({ id: patients.id })
+      .from(patients)
+      .where(eq(patients.id, data.patientId))
+      .limit(1);
+
+    if (!patient) {
+      return NextResponse.json({ error: "Patient not found" }, { status: 404 });
+    }
+
+    const processedDate = data.processedDate
+      ? new Date(data.processedDate)
+      : data.status === "Approved" || data.status === "Denied"
+        ? new Date()
+        : null;
+
+    type PostResult =
+      | { kind: "error"; status: number; error: string }
+      | { kind: "ok"; claim: typeof insuranceClaims.$inferSelect };
+
+    let result: PostResult | null = null;
+
+    for (let attempt = 0; attempt < 5 && !result; attempt++) {
+      try {
+        result = await db.transaction(async (tx): Promise<PostResult> => {
+          if (data.invoiceId) {
+            const [invoice] = await tx
+              .select({
+                id: invoices.id,
+                patientId: invoices.patientId,
+                totalAmount: invoices.totalAmount,
+              })
+              .from(invoices)
+              .where(eq(invoices.id, data.invoiceId))
+              .limit(1)
+              .for("update");
+
+            if (!invoice) {
+              return { kind: "error", status: 404, error: "Invoice not found" };
+            }
+
+            if (invoice.patientId !== data.patientId) {
+              return {
+                kind: "error",
+                status: 409,
+                error: "Invoice does not belong to this patient",
+              };
+            }
+
+            if (data.claimAmount > invoice.totalAmount) {
+              return {
+                kind: "error",
+                status: 400,
+                error: "Claim amount cannot exceed invoice total",
+              };
+            }
+
+            const [duplicate] = await tx
+              .select({ id: insuranceClaims.id })
+              .from(insuranceClaims)
+              .where(
+                and(
+                  eq(insuranceClaims.invoiceId, data.invoiceId),
+                  inArray(insuranceClaims.status, ACTIVE_CLAIM_STATUSES)
+                )
+              )
+              .limit(1);
+
+            if (duplicate) {
+              return {
+                kind: "error",
+                status: 409,
+                error: "An active insurance claim already exists for this invoice",
+              };
+            }
+          }
+
+          const claimCount = await tx
+            .select({ count: sql<number>`count(*)` })
+            .from(insuranceClaims);
+
+          const nextNumber = Number(claimCount[0]?.count ?? 0) + 1;
+          const claimId = `CLM-${String(nextNumber).padStart(3, "0")}`;
+
+          const [newClaim] = await tx
+            .insert(insuranceClaims)
+            .values({
+              claimId,
+              patientId: data.patientId,
+              invoiceId: data.invoiceId || null,
+              providerName: data.providerName,
+              policyNumber: data.policyNumber,
+              claimAmount: data.claimAmount,
+              approvedAmount: data.approvedAmount ?? null,
+              status: data.status,
+              diagnosis: data.diagnosis || null,
+              treatmentCode: data.treatmentCode || null,
+              submittedDate: data.submittedDate ? new Date(data.submittedDate) : null,
+              processedDate,
+              denialReason: data.denialReason || null,
+              notes: data.notes || null,
+            })
+            .returning();
+
+          return { kind: "ok", claim: newClaim };
+        });
+      } catch (error) {
+        if (attempt < 4 && isUniqueViolation(error)) {
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    if (!result) {
+      return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    }
+
+    if (result.kind === "error") {
+      return NextResponse.json({ error: result.error }, { status: result.status });
+    }
+
+    const newClaim = result.claim;
+
+    await recordAudit({
+      actorId: session.user.id,
+      action: "insurance.claim.create",
+      entityType: "insurance_claim",
+      entityId: newClaim.id,
+      severity: "INFO",
+      category: "insurance",
+      success: true,
+      metadata: {
+        claimId: newClaim.claimId,
+        patientId: newClaim.patientId,
+        invoiceId: newClaim.invoiceId,
+        status: newClaim.status,
+        claimAmount: newClaim.claimAmount,
+      },
+    });
 
     return NextResponse.json(newClaim, { status: 201 });
   } catch (error) {

@@ -16,9 +16,11 @@ import {
   Calendar,
   FileText,
   ClipboardList,
+  Receipt,
 } from "lucide-react";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
 import { cn } from "@/lib/utils";
+import { round2 } from "@/lib/billing";
 import type {
   Patient,
   PatientAllergy,
@@ -37,6 +39,14 @@ type PatientDetail = Patient & {
   allergies: PatientAllergy[];
   conditions: PatientCondition[];
   medications: PatientMedication[];
+};
+
+type BillingSummary = {
+  invoiceCount: number;
+  outstanding: number;
+  claimCount: number;
+  approvedTotal: number;
+  status: "ok" | "restricted" | "failed";
 };
 
 function InfoRow({ icon: Icon, label, value }: { icon: React.ComponentType<{ className?: string }>; label: string; value?: string | null }) {
@@ -103,6 +113,83 @@ export default function PatientRecordPage({ params }: { params: Promise<{ id: st
     };
     load();
   }, [fetchPatient]);
+
+  const [billingSummary, setBillingSummary] = useState<BillingSummary | null>(null);
+
+  useEffect(() => {
+    if (!patient?.id) return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [invRes, clmRes] = await Promise.all([
+          fetch(`/api/billing?patientId=${patient.id}&pageSize=100`),
+          fetch(`/api/insurance?patientId=${patient.id}&pageSize=100`),
+        ]);
+        if (cancelled) return;
+        if (invRes.status === 403 || clmRes.status === 403) {
+          setBillingSummary({
+            invoiceCount: 0,
+            outstanding: 0,
+            claimCount: 0,
+            approvedTotal: 0,
+            status: "restricted",
+          });
+          return;
+        }
+        if (!invRes.ok || !clmRes.ok) {
+          setBillingSummary({
+            invoiceCount: 0,
+            outstanding: 0,
+            claimCount: 0,
+            approvedTotal: 0,
+            status: "failed",
+          });
+          return;
+        }
+        const inv = await invRes.json();
+        const clm = await clmRes.json();
+        if (cancelled) return;
+        const invoiceRows: { totalAmount: number; paidAmount?: number | null }[] = Array.isArray(
+          inv.data
+        )
+          ? inv.data
+          : [];
+        const claimRows: { approvedAmount?: number | null }[] = Array.isArray(clm.data)
+          ? clm.data
+          : [];
+        const outstanding = round2(
+          invoiceRows.reduce(
+            (sum, row) => sum + row.totalAmount - (row.paidAmount ?? 0),
+            0
+          )
+        );
+        const approvedTotal = round2(
+          claimRows.reduce((sum, row) => sum + (row.approvedAmount ?? 0), 0)
+        );
+        setBillingSummary({
+          invoiceCount: Number(inv.meta?.total ?? invoiceRows.length),
+          outstanding,
+          claimCount: Number(clm.meta?.total ?? claimRows.length),
+          approvedTotal,
+          status: "ok",
+        });
+      } catch {
+        if (!cancelled) {
+          setBillingSummary({
+            invoiceCount: 0,
+            outstanding: 0,
+            claimCount: 0,
+            approvedTotal: 0,
+            status: "failed",
+          });
+        }
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [patient?.id]);
 
   if (loading) {
     return (
@@ -336,6 +423,59 @@ export default function PatientRecordPage({ params }: { params: Promise<{ id: st
               <InfoRow icon={Shield} label="Provider" value={patient.insuranceProvider} />
               <InfoRow icon={FileText} label="Policy #" value={patient.insurancePolicyNumber} />
             </div>
+          </div>
+
+          <div className="bg-card rounded-lg border border-border/50 p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-foreground font-headline mb-4 flex items-center gap-2">
+              <Receipt className="h-5 w-5 text-primary" />
+              Billing &amp; Insurance
+            </h2>
+            {billingSummary === null ? (
+              <p className="text-sm text-muted-foreground">Loading billing data...</p>
+            ) : billingSummary.status === "restricted" ? (
+              <p className="text-sm text-muted-foreground">
+                You do not have permission to view billing data.
+              </p>
+            ) : billingSummary.status === "failed" ? (
+              <p className="text-sm text-muted-foreground">Unable to load billing data.</p>
+            ) : (
+              <div className="space-y-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Invoices</span>
+                  <span className="text-foreground font-medium">{billingSummary.invoiceCount}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Outstanding</span>
+                  <span className="text-foreground font-medium">
+                    ${billingSummary.outstanding.toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Claims</span>
+                  <span className="text-foreground font-medium">{billingSummary.claimCount}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Approved Amount</span>
+                  <span className="text-foreground font-medium">
+                    ${billingSummary.approvedTotal.toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 pt-1">
+                  <Link
+                    href={`/billing?patientId=${patient.id}`}
+                    className="px-3 py-1.5 rounded-md border border-border/50 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+                  >
+                    View Invoices
+                  </Link>
+                  <Link
+                    href={`/insurance?patientId=${patient.id}`}
+                    className="px-3 py-1.5 rounded-md border border-border/50 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+                  >
+                    View Claims
+                  </Link>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="bg-card rounded-lg border border-border/50 p-6 shadow-sm">
