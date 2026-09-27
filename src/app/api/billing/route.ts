@@ -3,9 +3,11 @@ import { z } from "zod";
 import { and, eq, or, ilike, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
-import { db, invoices } from "@/lib/db";
+import { db, invoices, patients, appointments } from "@/lib/db";
 import { paginationSchema } from "@/lib/validations/common";
 import { invoiceSchema } from "@/lib/validations/billing";
+import { computeInvoiceTotal, isUniqueViolation } from "@/lib/billing";
+import { recordAudit } from "@/lib/audit";
 
 export async function GET(request: NextRequest) {
   try {
@@ -130,32 +132,119 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const invoiceCount = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(invoices);
+    const data = parsed.data;
 
-    const nextNumber = Number(invoiceCount[0]?.count ?? 0) + 1;
-    const invoiceId = `INV-${String(nextNumber).padStart(3, "0")}`;
+    const [patient] = await db
+      .select({ id: patients.id })
+      .from(patients)
+      .where(eq(patients.id, data.patientId))
+      .limit(1);
 
-    const [newInvoice] = await db
-      .insert(invoices)
-      .values({
-        invoiceId,
-        patientId: parsed.data.patientId,
-        appointmentId: parsed.data.appointmentId || null,
-        description: parsed.data.description || null,
-        subtotal: parsed.data.subtotal,
-        taxAmount: parsed.data.taxAmount ?? null,
-        discountAmount: parsed.data.discountAmount ?? null,
-        totalAmount: parsed.data.totalAmount,
-        paidAmount: parsed.data.paidAmount ?? null,
-        status: parsed.data.status,
-        paymentMethod: parsed.data.paymentMethod || null,
-        paidDate: parsed.data.paidDate ? new Date(parsed.data.paidDate) : null,
-        dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
-        notes: parsed.data.notes || null,
-      })
-      .returning();
+    if (!patient) {
+      return NextResponse.json({ error: "Patient not found" }, { status: 404 });
+    }
+
+    if (data.appointmentId) {
+      const [appointment] = await db
+        .select({ id: appointments.id, patientId: appointments.patientId })
+        .from(appointments)
+        .where(eq(appointments.id, data.appointmentId))
+        .limit(1);
+
+      if (!appointment) {
+        return NextResponse.json({ error: "Appointment not found" }, { status: 404 });
+      }
+
+      if (appointment.patientId !== data.patientId) {
+        return NextResponse.json(
+          { error: "Appointment does not belong to this patient" },
+          { status: 409 }
+        );
+      }
+    }
+
+    const totalAmount = computeInvoiceTotal(data.subtotal, data.taxAmount, data.discountAmount);
+
+    if (totalAmount < 0) {
+      return NextResponse.json(
+        { error: "Discount cannot exceed subtotal plus tax" },
+        { status: 400 }
+      );
+    }
+
+    const paidAmount = data.paidAmount ?? null;
+
+    if (paidAmount !== null && paidAmount > totalAmount) {
+      return NextResponse.json(
+        { error: "Paid amount cannot exceed total amount" },
+        { status: 400 }
+      );
+    }
+
+    if (data.status === "Paid" && (paidAmount === null || paidAmount < totalAmount)) {
+      return NextResponse.json(
+        { error: "Paid invoices require paid amount at least equal to total amount" },
+        { status: 400 }
+      );
+    }
+
+    let newInvoice: (typeof invoices.$inferSelect) | undefined;
+
+    for (let attempt = 0; attempt < 5 && !newInvoice; attempt++) {
+      const invoiceCount = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(invoices);
+
+      const nextNumber = Number(invoiceCount[0]?.count ?? 0) + 1;
+      const invoiceId = `INV-${String(nextNumber).padStart(3, "0")}`;
+
+      try {
+        [newInvoice] = await db
+          .insert(invoices)
+          .values({
+            invoiceId,
+            patientId: data.patientId,
+            appointmentId: data.appointmentId || null,
+            description: data.description || null,
+            subtotal: data.subtotal,
+            taxAmount: data.taxAmount ?? null,
+            discountAmount: data.discountAmount ?? null,
+            totalAmount,
+            paidAmount,
+            status: data.status,
+            paymentMethod: data.paymentMethod || null,
+            paidDate: data.paidDate ? new Date(data.paidDate) : null,
+            dueDate: data.dueDate ? new Date(data.dueDate) : null,
+            notes: data.notes || null,
+          })
+          .returning();
+      } catch (error) {
+        if (attempt < 4 && isUniqueViolation(error)) {
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    if (!newInvoice) {
+      return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    }
+
+    await recordAudit({
+      actorId: session.user.id,
+      action: "billing.invoice.create",
+      entityType: "invoice",
+      entityId: newInvoice.id,
+      severity: "INFO",
+      category: "billing",
+      success: true,
+      metadata: {
+        invoiceId: newInvoice.invoiceId,
+        patientId: newInvoice.patientId,
+        status: newInvoice.status,
+        totalAmount: newInvoice.totalAmount,
+      },
+    });
 
     return NextResponse.json(newInvoice, { status: 201 });
   } catch (error) {

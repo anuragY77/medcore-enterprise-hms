@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { invoiceSchema, type InvoiceFormData } from "@/lib/validations/billing";
+import { computeInvoiceTotal } from "@/lib/billing";
 import { PatientPicker } from "@/components/patients/patient-picker";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 
@@ -73,6 +74,19 @@ export function InvoiceForm({ open, onOpenChange, initialData, mode = "create", 
   });
 
   const patientIdValue = useWatch({ control, name: "patientId" });
+  const subtotalValue = useWatch({ control, name: "subtotal" });
+  const taxValue = useWatch({ control, name: "taxAmount" });
+  const discountValue = useWatch({ control, name: "discountAmount" });
+
+  const computedTotal = computeInvoiceTotal(
+    Number.isFinite(subtotalValue) ? subtotalValue : 0,
+    taxValue,
+    discountValue
+  );
+
+  useEffect(() => {
+    setValue("totalAmount", computedTotal);
+  }, [computedTotal, setValue]);
 
   const onSubmit = async (data: InvoiceFormData) => {
     try {
@@ -86,7 +100,7 @@ export function InvoiceForm({ open, onOpenChange, initialData, mode = "create", 
       const res = await fetch(url, {
         method: mode === "edit" ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, totalAmount: computedTotal }),
       });
 
       if (!res.ok) {
@@ -178,12 +192,12 @@ export function InvoiceForm({ open, onOpenChange, initialData, mode = "create", 
               <label className="block text-sm font-medium text-foreground mb-1">
                 Total Amount <span className="text-destructive">*</span>
               </label>
-              <input
-                type="number"
-                step="0.01"
-                {...register("totalAmount", { valueAsNumber: true })}
-                className="w-full px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
+              <div className="w-full px-3 py-2 rounded-md border border-border/50 bg-muted text-sm font-medium text-foreground">
+                {computedTotal.toFixed(2)}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Calculated from subtotal, tax and discount
+              </p>
               {errors.totalAmount && (
                 <p className="text-xs text-destructive mt-1">{errors.totalAmount.message}</p>
               )}

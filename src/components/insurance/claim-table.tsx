@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Pencil,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +36,7 @@ interface ClaimTableProps {
   claims: InsuranceClaim[];
   pageSize?: number;
   onEdit: (claim: InsuranceClaim) => void;
+  onUpdated: () => void;
 }
 
 type SortField = "claimId" | "patientId" | "providerName" | "policyNumber" | "claimAmount" | "approvedAmount" | "submittedDate" | "status";
@@ -45,6 +47,13 @@ const STATUS_COLORS: Record<string, string> = {
   Processing: "bg-amber-100 text-amber-800",
   Approved: "bg-emerald-100 text-emerald-800",
   Denied: "bg-red-100 text-red-800",
+};
+
+const ALLOWED_TRANSITIONS: Record<string, string[]> = {
+  Submitted: ["Processing", "Approved", "Denied"],
+  Processing: ["Approved", "Denied"],
+  Approved: [],
+  Denied: [],
 };
 
 function SortIcon({
@@ -70,10 +79,73 @@ function formatCurrency(value: number): string {
   return new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 }
 
-export function ClaimTable({ claims, pageSize = 10, onEdit }: ClaimTableProps) {
+export function ClaimTable({ claims, pageSize = 10, onEdit, onUpdated }: ClaimTableProps) {
   const [sortField, setSortField] = useState<SortField>("claimId");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [currentPage, setCurrentPage] = useState(1);
+
+  const [statusTarget, setStatusTarget] = useState<InsuranceClaim | null>(null);
+  const [newStatus, setNewStatus] = useState("");
+  const [approvedAmount, setApprovedAmount] = useState("");
+  const [denialReason, setDenialReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
+
+  const openStatusDialog = (claim: InsuranceClaim) => {
+    setStatusTarget(claim);
+    setNewStatus("");
+    setApprovedAmount("");
+    setDenialReason("");
+    setStatusError(null);
+  };
+
+  const closeStatusDialog = () => {
+    if (saving) return;
+    setStatusTarget(null);
+  };
+
+  const handleStatusSubmit = async () => {
+    if (!statusTarget || !newStatus || saving) return;
+
+    const payload: Record<string, unknown> = { status: newStatus };
+
+    if (newStatus === "Approved") {
+      const amount = Number(approvedAmount);
+      if (!Number.isFinite(amount) || amount < 0) {
+        setStatusError("Enter a valid approved amount");
+        return;
+      }
+      if (amount > statusTarget.claimAmount) {
+        setStatusError("Approved amount cannot exceed claim amount");
+        return;
+      }
+      payload.approvedAmount = amount;
+    }
+
+    if (newStatus === "Denied" && denialReason.trim()) {
+      payload.denialReason = denialReason.trim();
+    }
+
+    try {
+      setSaving(true);
+      setStatusError(null);
+      const res = await fetch(`/api/insurance/${statusTarget.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.error || "Failed to update claim status");
+      }
+      setStatusTarget(null);
+      onUpdated();
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : "Failed to update claim status");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -208,13 +280,24 @@ export function ClaimTable({ claims, pageSize = 10, onEdit }: ClaimTableProps) {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <button
-                      onClick={() => onEdit(claim)}
-                      className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                      title="Edit claim"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      {(ALLOWED_TRANSITIONS[claim.status]?.length ?? 0) > 0 && (
+                        <button
+                          onClick={() => openStatusDialog(claim)}
+                          className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                          title="Update claim status"
+                        >
+                          <RefreshCw className="h-4 w-4" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => onEdit(claim)}
+                        className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        title="Edit claim"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -258,6 +341,92 @@ export function ClaimTable({ claims, pageSize = 10, onEdit }: ClaimTableProps) {
             >
               <ChevronRight className="h-4 w-4" />
             </button>
+          </div>
+        </div>
+      )}
+
+      {statusTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-card rounded-lg border border-border/50 p-6 shadow-lg max-w-sm w-full mx-4">
+            <h3 className="text-lg font-semibold text-foreground mb-1">Update Claim Status</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Claim <strong>{statusTarget.claimId}</strong> — current status{" "}
+              <strong>{statusTarget.status}</strong>
+            </p>
+
+            {statusError && (
+              <div className="bg-red-50 border border-red-200 text-red-800 px-3 py-2 rounded-md text-sm mb-4">
+                {statusError}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">
+                  New Status <span className="text-destructive">*</span>
+                </label>
+                <select
+                  value={newStatus}
+                  onChange={(e) => setNewStatus(e.target.value)}
+                  className="w-full px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                >
+                  <option value="">Select status</option>
+                  {(ALLOWED_TRANSITIONS[statusTarget.status] ?? []).map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {newStatus === "Approved" && (
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">
+                    Approved Amount <span className="text-destructive">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    max={statusTarget.claimAmount}
+                    value={approvedAmount}
+                    onChange={(e) => setApprovedAmount(e.target.value)}
+                    className="w-full px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+              )}
+
+              {newStatus === "Denied" && (
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">
+                    Denial Reason
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={denialReason}
+                    onChange={(e) => setDenialReason(e.target.value)}
+                    className="w-full px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3 justify-end mt-5">
+              <button
+                onClick={closeStatusDialog}
+                disabled={saving}
+                className="px-4 py-2 rounded-md border border-border/50 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleStatusSubmit}
+                disabled={saving || !newStatus}
+                className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+              >
+                {saving ? "Saving..." : "Update Status"}
+              </button>
+            </div>
           </div>
         </div>
       )}

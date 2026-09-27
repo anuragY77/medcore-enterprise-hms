@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Plus, Receipt, DollarSign, Clock, AlertTriangle, RefreshCw } from "lucide-react";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
 import { InvoiceTable, InvoiceForm, type Invoice } from "@/components/billing";
@@ -20,6 +20,11 @@ export default function BillingPage() {
   const [editingInvoice, setEditingInvoice] = useState<Invoice | undefined>(undefined);
 
   const [confirmDelete, setConfirmDelete] = useState<Invoice | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const [patientFilter, setPatientFilter] = useState<string | null>(null);
+  const patientFilterRef = useRef<string | null>(null);
 
   const fetchInvoices = useCallback(async () => {
     try {
@@ -28,6 +33,7 @@ export default function BillingPage() {
       if (searchQuery) params.set("query", searchQuery);
       if (statusFilter !== "All") params.set("status", statusFilter);
       if (paymentMethodFilter) params.set("paymentMethod", paymentMethodFilter);
+      if (patientFilterRef.current) params.set("patientId", patientFilterRef.current);
 
       const res = await fetch(`/api/billing?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch invoices");
@@ -44,7 +50,14 @@ export default function BillingPage() {
     const load = async () => {
       try {
         setLoading(true);
-        const res = await fetch("/api/billing");
+        const patientId = new URLSearchParams(window.location.search).get("patientId");
+        if (patientId) {
+          patientFilterRef.current = patientId;
+          setPatientFilter(patientId);
+        }
+        const params = new URLSearchParams();
+        if (patientId) params.set("patientId", patientId);
+        const res = await fetch(`/api/billing?${params.toString()}`);
         if (!res.ok) throw new Error("Failed to fetch invoices");
         const data = await res.json();
         setInvoices(data.data);
@@ -57,6 +70,12 @@ export default function BillingPage() {
     load();
   }, []);
 
+  const clearPatientFilter = () => {
+    patientFilterRef.current = null;
+    setPatientFilter(null);
+    fetchInvoices();
+  };
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     fetchInvoices();
@@ -68,19 +87,26 @@ export default function BillingPage() {
   };
 
   const handleDeleteRequest = (invoice: Invoice) => {
+    setDeleteError(null);
     setConfirmDelete(invoice);
   };
 
   const handleDeleteConfirm = async () => {
-    if (!confirmDelete) return;
+    if (!confirmDelete || deleting) return;
     try {
+      setDeleting(true);
+      setDeleteError(null);
       const res = await fetch(`/api/billing/${confirmDelete.id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to delete invoice");
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.error || "Failed to delete invoice");
+      }
       setConfirmDelete(null);
       fetchInvoices();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete invoice");
-      setConfirmDelete(null);
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete invoice");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -165,6 +191,21 @@ export default function BillingPage() {
         </div>
       </div>
 
+      {patientFilter && (
+        <div className="mb-4 flex items-center gap-2 text-sm">
+          <span className="text-muted-foreground">Filtered by patient:</span>
+          <span className="font-mono text-xs px-2 py-1 rounded-md bg-muted text-foreground">
+            {patientFilter}
+          </span>
+          <button
+            onClick={clearPatientFilter}
+            className="px-3 py-1.5 rounded-md border border-border/50 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
       <form onSubmit={handleSearch} className="mb-6 bg-card rounded-lg border border-border/50 p-4 shadow-sm">
         <div className="flex flex-wrap gap-3">
           <input
@@ -237,18 +278,25 @@ export default function BillingPage() {
               Are you sure you want to delete invoice <strong>{confirmDelete.invoiceId}</strong>?
               This action cannot be undone.
             </p>
+            {deleteError && (
+              <div className="bg-red-50 border border-red-200 text-red-800 px-3 py-2 rounded-md text-sm mb-4">
+                {deleteError}
+              </div>
+            )}
             <div className="flex items-center gap-3 justify-end">
               <button
                 onClick={() => setConfirmDelete(null)}
-                className="px-4 py-2 rounded-md border border-border/50 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
+                disabled={deleting}
+                className="px-4 py-2 rounded-md border border-border/50 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleDeleteConfirm}
-                className="px-4 py-2 rounded-md bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors"
+                disabled={deleting}
+                className="px-4 py-2 rounded-md bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
               >
-                Delete
+                {deleting ? "Deleting..." : "Delete"}
               </button>
             </div>
           </div>
