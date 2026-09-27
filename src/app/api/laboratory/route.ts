@@ -3,7 +3,7 @@ import { z } from "zod";
 import { and, eq, or, ilike, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
-import { db, labTests } from "@/lib/db";
+import { db, labTests, patients, consultations } from "@/lib/db";
 import { paginationSchema } from "@/lib/validations/common";
 import { labTestSchema } from "@/lib/validations/laboratory";
 
@@ -136,6 +136,57 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (parsed.data.status === "Completed") {
+      return NextResponse.json(
+        {
+          error: "Validation failed",
+          details: {
+            status: ["Lab tests cannot be created as completed; enter the result through the laboratory workflow"],
+          },
+        },
+        { status: 400 }
+      );
+    }
+
+    if (parsed.data.result && parsed.data.result.trim().length > 0) {
+      return NextResponse.json(
+        {
+          error: "Validation failed",
+          details: { result: ["Results can only be entered when completing a test"] },
+        },
+        { status: 400 }
+      );
+    }
+
+    const [patient] = await db
+      .select({ id: patients.id })
+      .from(patients)
+      .where(eq(patients.id, parsed.data.patientId))
+      .limit(1);
+
+    if (!patient) {
+      return NextResponse.json({ error: "Patient not found" }, { status: 404 });
+    }
+
+    if (parsed.data.consultationId) {
+      const [consultation] = await db
+        .select({ id: consultations.id, patientId: consultations.patientId })
+        .from(consultations)
+        .where(eq(consultations.id, parsed.data.consultationId))
+        .limit(1);
+
+      if (!consultation) {
+        return NextResponse.json({ error: "Consultation not found" }, { status: 404 });
+      }
+
+      if (consultation.patientId !== parsed.data.patientId) {
+        return NextResponse.json(
+          { error: "Consultation does not belong to this patient" },
+          { status: 409 }
+        );
+      }
+    }
+
     const testCount = await db
       .select({ count: sql<number>`count(*)` })
       .from(labTests);
@@ -153,10 +204,10 @@ export async function POST(request: NextRequest) {
         category: parsed.data.category,
         orderedBy: parsed.data.orderedBy || null,
         status: parsed.data.status,
-        result: parsed.data.result || null,
+        result: null,
         notes: parsed.data.notes || null,
         testDate: new Date(parsed.data.testDate),
-        completedAt: parsed.data.completedAt ? new Date(parsed.data.completedAt) : null,
+        completedAt: null,
       })
       .returning();
 

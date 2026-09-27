@@ -89,14 +89,32 @@ export function LabTestForm({ open, onOpenChange, initialData, mode = "create", 
       setIsSubmitting(true);
       setServerError(null);
 
-      const url = mode === "edit" && initialData
-        ? `/api/laboratory/${initialData.id}`
-        : "/api/laboratory";
+      const isEdit = mode === "edit" && initialData;
+      const payload = isEdit
+        ? {
+            patientId: data.patientId ?? initialData.patientId,
+            consultationId: data.consultationId ?? initialData.consultationId ?? undefined,
+            testName: data.testName,
+            category: data.category,
+            orderedBy: data.orderedBy,
+            notes: data.notes,
+            testDate: data.testDate,
+          }
+        : {
+            patientId: data.patientId,
+            consultationId: data.consultationId,
+            testName: data.testName,
+            category: data.category,
+            orderedBy: data.orderedBy,
+            status: data.status,
+            notes: data.notes,
+            testDate: data.testDate,
+          };
 
-      const res = await fetch(url, {
-        method: mode === "edit" ? "PUT" : "POST",
+      const res = await fetch(isEdit ? `/api/laboratory/${initialData.id}` : "/api/laboratory", {
+        method: isEdit ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
@@ -128,7 +146,9 @@ export function LabTestForm({ open, onOpenChange, initialData, mode = "create", 
         <SheetHeader className="mb-4">
           <SheetTitle>{mode === "edit" ? "Edit Lab Test" : "Order New Lab Test"}</SheetTitle>
           <SheetDescription>
-            {mode === "edit" ? "Update laboratory test details." : "Order a new laboratory or diagnostic test."}
+            {mode === "edit"
+              ? "Update laboratory test details. Results are recorded through the result workflow."
+              : "Order a new laboratory or diagnostic test."}
           </SheetDescription>
         </SheetHeader>
 
@@ -139,28 +159,42 @@ export function LabTestForm({ open, onOpenChange, initialData, mode = "create", 
             </div>
           )}
 
-          <PatientPicker
-            value={patientIdValue ?? ""}
-            onChange={(id) =>
-              setValue("patientId", id, { shouldValidate: true, shouldDirty: true })
-            }
-            error={errors.patientId?.message}
-            required
-          />
-
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">
-              Consultation ID
-            </label>
-            <input
-              {...register("consultationId")}
-              placeholder="Enter consultation UUID (optional)"
-              className="w-full px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono"
+          {mode === "edit" ? (
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">Patient</label>
+              <p className="px-3 py-2 rounded-md border border-border/50 bg-muted/40 text-sm font-mono">
+                {initialData?.patientId}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Patient cannot be changed after ordering.
+              </p>
+            </div>
+          ) : (
+            <PatientPicker
+              value={patientIdValue ?? ""}
+              onChange={(id) =>
+                setValue("patientId", id, { shouldValidate: true, shouldDirty: true })
+              }
+              error={errors.patientId?.message}
+              required
             />
-            {errors.consultationId && (
-              <p className="text-xs text-destructive mt-1">{errors.consultationId.message}</p>
-            )}
-          </div>
+          )}
+
+          {mode === "create" && (
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">
+                Consultation ID
+              </label>
+              <input
+                {...register("consultationId")}
+                placeholder="Enter consultation UUID (optional)"
+                className="w-full px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono"
+              />
+              {errors.consultationId && (
+                <p className="text-xs text-destructive mt-1">{errors.consultationId.message}</p>
+              )}
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">
@@ -195,22 +229,23 @@ export function LabTestForm({ open, onOpenChange, initialData, mode = "create", 
               )}
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
-                Status <span className="text-destructive">*</span>
-              </label>
-              <select
-                {...register("status")}
-                className="w-full px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-              >
-                <option value="Pending">Pending</option>
-                <option value="In Progress">In Progress</option>
-                <option value="Completed">Completed</option>
-              </select>
-              {errors.status && (
-                <p className="text-xs text-destructive mt-1">{errors.status.message}</p>
-              )}
-            </div>
+            {mode === "create" && (
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">
+                  Status <span className="text-destructive">*</span>
+                </label>
+                <select
+                  {...register("status")}
+                  className="w-full px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                >
+                  <option value="Pending">Pending</option>
+                  <option value="In Progress">In Progress</option>
+                </select>
+                {errors.status && (
+                  <p className="text-xs text-destructive mt-1">{errors.status.message}</p>
+                )}
+              </div>
+            )}
           </div>
 
           <div>
@@ -224,43 +259,18 @@ export function LabTestForm({ open, onOpenChange, initialData, mode = "create", 
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
-                Test Date <span className="text-destructive">*</span>
-              </label>
-              <input
-                type="date"
-                {...register("testDate")}
-                className="w-full px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
-              {errors.testDate && (
-                <p className="text-xs text-destructive mt-1">{errors.testDate.message}</p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
-                Completed At
-              </label>
-              <input
-                type="date"
-                {...register("completedAt")}
-                className="w-full px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
-            </div>
-          </div>
-
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">
-              Result
+              Test Date <span className="text-destructive">*</span>
             </label>
-            <textarea
-              {...register("result")}
-              rows={3}
-              placeholder="Enter test results (leave blank if pending)"
+            <input
+              type="date"
+              {...register("testDate")}
               className="w-full px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
+            {errors.testDate && (
+              <p className="text-xs text-destructive mt-1">{errors.testDate.message}</p>
+            )}
           </div>
 
           <div>

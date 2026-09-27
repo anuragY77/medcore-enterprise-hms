@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
 import { db, labTests } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
-import { labTestSchema } from "@/lib/validations/laboratory";
+import { labTestUpdateSchema } from "@/lib/validations/laboratory";
 
 export async function GET(
   request: NextRequest,
@@ -71,18 +71,13 @@ export async function PUT(
       );
     }
 
-    const [existing] = await db
-      .select({ id: labTests.id })
-      .from(labTests)
-      .where(eq(labTests.id, id))
-      .limit(1);
+    const body = await request.json().catch(() => null);
 
-    if (!existing) {
-      return NextResponse.json({ error: "Lab test not found" }, { status: 404 });
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
     }
 
-    const body = await request.json();
-    const parsed = labTestSchema.partial().safeParse(body);
+    const parsed = labTestUpdateSchema.safeParse(body);
 
     if (!parsed.success) {
       return NextResponse.json(
@@ -91,20 +86,74 @@ export async function PUT(
       );
     }
 
+    const [existing] = await db
+      .select()
+      .from(labTests)
+      .where(eq(labTests.id, id))
+      .limit(1);
+
+    if (!existing) {
+      return NextResponse.json({ error: "Lab test not found" }, { status: 404 });
+    }
+
+    const raw = body as Record<string, unknown>;
+
+    if (raw.patientId !== undefined && raw.patientId !== existing.patientId) {
+      return NextResponse.json(
+        { error: "Lab test patient cannot be reassigned" },
+        { status: 409 }
+      );
+    }
+
+    if (
+      raw.consultationId !== undefined &&
+      (raw.consultationId || null) !== (existing.consultationId ?? null)
+    ) {
+      return NextResponse.json(
+        { error: "Lab test consultation cannot be changed" },
+        { status: 409 }
+      );
+    }
+
+    if (raw.status !== undefined && raw.status !== existing.status) {
+      return NextResponse.json(
+        { error: "Lab test status is managed by the laboratory workflow" },
+        { status: 409 }
+      );
+    }
+
+    if (
+      raw.result !== undefined &&
+      (raw.result ?? null) !== (existing.result ?? null)
+    ) {
+      return NextResponse.json(
+        { error: "Lab test results are managed by the laboratory workflow" },
+        { status: 409 }
+      );
+    }
+
+    const existingCompletedAt = existing.completedAt
+      ? existing.completedAt.getTime()
+      : null;
+    let bodyCompletedAt: number | null = null;
+    if (raw.completedAt !== undefined && raw.completedAt !== null && raw.completedAt !== "") {
+      bodyCompletedAt = new Date(String(raw.completedAt)).getTime();
+    }
+    if (raw.completedAt !== undefined && bodyCompletedAt !== existingCompletedAt) {
+      return NextResponse.json(
+        { error: "Lab test completion time is managed by the laboratory workflow" },
+        { status: 409 }
+      );
+    }
+
     const [updatedTest] = await db
       .update(labTests)
       .set({
-        ...parsed.data,
-        patientId: parsed.data.patientId ?? undefined,
-        consultationId: parsed.data.consultationId ?? undefined,
         testName: parsed.data.testName ?? undefined,
         category: parsed.data.category ?? undefined,
         orderedBy: parsed.data.orderedBy ?? undefined,
-        status: parsed.data.status ?? undefined,
-        result: parsed.data.result ?? undefined,
         notes: parsed.data.notes ?? undefined,
         testDate: parsed.data.testDate ? new Date(parsed.data.testDate) : undefined,
-        completedAt: parsed.data.completedAt ? new Date(parsed.data.completedAt) : undefined,
         updatedAt: new Date(),
       })
       .where(eq(labTests.id, id))
