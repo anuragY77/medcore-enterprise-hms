@@ -3,6 +3,7 @@ import { and, eq, or, ilike, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
 import { db, patients, beds, vitals } from "@/lib/db";
+import { paginationSchema } from "@/lib/validations/common";
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,6 +19,20 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get("search") || "";
     const ward = searchParams.get("ward") || "";
     const status = searchParams.get("status") || "All";
+    const pagination = paginationSchema().safeParse({
+      page: searchParams.get("page") || undefined,
+      pageSize: searchParams.get("pageSize") || undefined,
+    });
+
+    if (!pagination.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: pagination.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
+
+    const { page, pageSize } = pagination.data;
+    const offset = (page - 1) * pageSize;
 
     const conditions = [];
 
@@ -42,29 +57,44 @@ export async function GET(request: NextRequest) {
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-    const patientsWithBeds = await db
-      .select({
-        id: patients.id,
-        patientId: patients.patientId,
-        firstName: patients.firstName,
-        lastName: patients.lastName,
-        gender: patients.gender,
-        department: patients.department,
-        attendingDoctor: patients.attendingDoctor,
-        status: patients.status,
-        bedId: beds.bedId,
-        roomNumber: beds.roomNumber,
-        ward: beds.ward,
-        bedType: beds.type,
-        bedStatus: beds.status,
-      })
-      .from(patients)
-      .innerJoin(beds, eq(beds.patientId, patients.id))
-      .where(whereClause)
-      .orderBy(sql`${patients.lastName} ASC`);
+    const [countResult, patientsWithBeds] = await Promise.all([
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(patients)
+        .innerJoin(beds, eq(beds.patientId, patients.id))
+        .where(whereClause),
+      db
+        .select({
+          id: patients.id,
+          patientId: patients.patientId,
+          firstName: patients.firstName,
+          lastName: patients.lastName,
+          gender: patients.gender,
+          department: patients.department,
+          attendingDoctor: patients.attendingDoctor,
+          status: patients.status,
+          bedId: beds.bedId,
+          roomNumber: beds.roomNumber,
+          ward: beds.ward,
+          bedType: beds.type,
+          bedStatus: beds.status,
+          bedUpdatedAt: beds.updatedAt,
+        })
+        .from(patients)
+        .innerJoin(beds, eq(beds.patientId, patients.id))
+        .where(whereClause)
+        .orderBy(sql`${patients.lastName} ASC`)
+        .limit(pageSize)
+        .offset(offset),
+    ]);
+
+    const total = Number(countResult[0]?.count ?? 0);
 
     if (patientsWithBeds.length === 0) {
-      return NextResponse.json({ data: [] });
+      return NextResponse.json({
+        data: [],
+        meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
+      });
     }
 
     const patientIds = patientsWithBeds.map((p) => p.id);
@@ -95,7 +125,10 @@ export async function GET(request: NextRequest) {
       latestVitals: vitalsByPatient.get(patient.id) || null,
     }));
 
-    return NextResponse.json({ data: enrichedPatients });
+    return NextResponse.json({
+      data: enrichedPatients,
+      meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
+    });
   } catch (error) {
     console.error("Failed to fetch ward patients:", error);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });

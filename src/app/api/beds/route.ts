@@ -2,9 +2,30 @@ import { NextRequest, NextResponse } from "next/server";
 import { and, eq, or, ilike, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
-import { db, beds } from "@/lib/db";
+import { db, beds, patients } from "@/lib/db";
 import { paginationSchema } from "@/lib/validations/common";
 import { bedSchema } from "@/lib/validations/bed";
+
+const BED_SELECT = {
+  id: beds.id,
+  bedId: beds.bedId,
+  roomNumber: beds.roomNumber,
+  department: beds.department,
+  ward: beds.ward,
+  type: beds.type,
+  status: beds.status,
+  patientId: beds.patientId,
+  createdAt: beds.createdAt,
+  updatedAt: beds.updatedAt,
+  patientName: sql<string | null>`concat(${patients.firstName}, ' ', ${patients.lastName})`,
+  patientNumber: patients.patientId,
+};
+
+function isUniqueViolation(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const e = error as { code?: string; message?: string };
+  return e.code === "23505" || Boolean(e.message && e.message.includes("duplicate key"));
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,6 +43,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get("status") || "All";
     const type = searchParams.get("type") || "All";
     const roomNumber = searchParams.get("roomNumber") || "";
+    const patientId = searchParams.get("patientId") || "";
     const pagination = paginationSchema().safeParse({
       page: searchParams.get("page") || undefined,
       pageSize: searchParams.get("pageSize") || undefined,
@@ -32,6 +54,18 @@ export async function GET(request: NextRequest) {
         { error: "Validation failed", details: pagination.error.flatten().fieldErrors },
         { status: 400 }
       );
+    }
+
+    let patientFilter: string | null = null;
+    if (patientId) {
+      const uuidParsed = bedSchema.shape.patientId.safeParse(patientId);
+      if (!uuidParsed.success) {
+        return NextResponse.json(
+          { error: "Validation failed", details: { patientId: ["Invalid patient ID"] } },
+          { status: 400 }
+        );
+      }
+      patientFilter = patientId;
     }
 
     const { page, pageSize } = pagination.data;
@@ -66,16 +100,22 @@ export async function GET(request: NextRequest) {
       conditions.push(eq(beds.roomNumber, roomNumber));
     }
 
+    if (patientFilter) {
+      conditions.push(eq(beds.patientId, patientFilter));
+    }
+
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     const [countResult, bedsList] = await Promise.all([
       db
         .select({ count: sql<number>`count(*)` })
         .from(beds)
+        .leftJoin(patients, eq(beds.patientId, patients.id))
         .where(whereClause),
       db
-        .select()
+        .select(BED_SELECT)
         .from(beds)
+        .leftJoin(patients, eq(beds.patientId, patients.id))
         .where(whereClause)
         .orderBy(sql`${beds.createdAt} DESC`)
         .limit(pageSize)
@@ -109,7 +149,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const body = await request.json();
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Validation failed", details: { body: ["Invalid JSON"] } }, { status: 400 });
+    }
+
     const parsed = bedSchema.safeParse(body);
 
     if (!parsed.success) {
@@ -119,25 +165,78 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const bedCount = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(beds);
+    const data = parsed.data;
 
-    const nextNumber = Number(bedCount[0]?.count ?? 0) + 1;
-    const bedId = `BED-${String(nextNumber).padStart(3, "0")}`;
+    if (data.status === "Occupied" && !data.patientId) {
+      return NextResponse.json(
+        { error: "Validation failed", details: { status: ["Occupied beds require a patient"] } },
+        { status: 400 }
+      );
+    }
+    if (data.patientId && data.status !== "Occupied") {
+      return NextResponse.json(
+        { error: "Validation failed", details: { patientId: ["Patient assignment requires status Occupied"] } },
+        { status: 400 }
+      );
+    }
 
-    const [newBed] = await db
-      .insert(beds)
-      .values({
-        bedId,
-        roomNumber: parsed.data.roomNumber,
-        department: parsed.data.department,
-        ward: parsed.data.ward || null,
-        type: parsed.data.type,
-        status: parsed.data.status,
-        patientId: parsed.data.patientId || null,
-      })
-      .returning();
+    if (data.patientId) {
+      const result = await db.transaction(async (tx) => {
+        const [patient] = await tx
+          .select({ id: patients.id, status: patients.status })
+          .from(patients)
+          .where(eq(patients.id, data.patientId as string))
+          .limit(1)
+          .for("update");
+
+        if (!patient) {
+          return { status: 404, error: "Patient not found" };
+        }
+        if (patient.status === "Discharged") {
+          return { status: 409, error: "Patient has been discharged" };
+        }
+
+        const [existing] = await tx
+          .select({ id: beds.id })
+          .from(beds)
+          .where(eq(beds.patientId, data.patientId as string))
+          .limit(1);
+
+        if (existing) {
+          return { status: 409, error: "Patient already occupies a bed" };
+        }
+
+        return { status: 0 };
+      });
+
+      if (result.status !== 0) {
+        return NextResponse.json({ error: result.error }, { status: result.status });
+      }
+    }
+
+    let newBed = null;
+    for (let attempt = 0; attempt < 5 && !newBed; attempt++) {
+      const bedCount = await db.select({ count: sql<number>`count(*)` }).from(beds);
+      const nextNumber = Number(bedCount[0]?.count ?? 0) + 1 + attempt;
+      const bedId = `BED-${String(nextNumber).padStart(3, "0")}`;
+      try {
+        const [row] = await db
+          .insert(beds)
+          .values({
+            bedId,
+            roomNumber: data.roomNumber,
+            department: data.department,
+            ward: data.ward || null,
+            type: data.type,
+            status: data.status,
+            patientId: data.patientId || null,
+          })
+          .returning();
+        newBed = row;
+      } catch (error) {
+        if (!isUniqueViolation(error) || attempt === 4) throw error;
+      }
+    }
 
     return NextResponse.json(newBed, { status: 201 });
   } catch (error) {

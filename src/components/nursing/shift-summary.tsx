@@ -1,15 +1,15 @@
 "use client";
 
-import { UserPlus, UserMinus, ArrowRightLeft } from "lucide-react";
+import { UserPlus, UserMinus, BedDouble } from "lucide-react";
 
 interface ShiftSummaryProps {
   admissions: number;
   discharges: number;
-  transfers: number;
+  occupied: number;
   loading?: boolean;
 }
 
-export function ShiftSummary({ admissions, discharges, transfers, loading }: ShiftSummaryProps) {
+export function ShiftSummary({ admissions, discharges, occupied, loading }: ShiftSummaryProps) {
   if (loading) {
     return (
       <div className="bg-card rounded-lg border border-border/50 p-6 shadow-sm">
@@ -37,9 +37,9 @@ export function ShiftSummary({ admissions, discharges, transfers, loading }: Shi
             <p className="text-xs text-muted-foreground">Disch</p>
           </div>
           <div className="text-center p-3 rounded-lg bg-muted/30">
-            <ArrowRightLeft className="h-5 w-5 text-amber-600 mx-auto mb-1" />
-            <p className="text-lg font-semibold text-foreground">{transfers}</p>
-            <p className="text-xs text-muted-foreground">Trans</p>
+            <BedDouble className="h-5 w-5 text-amber-600 mx-auto mb-1" />
+            <p className="text-lg font-semibold text-foreground">{occupied}</p>
+            <p className="text-xs text-muted-foreground">Occupied</p>
           </div>
         </div>
       </div>

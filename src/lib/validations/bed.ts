@@ -26,3 +26,9 @@ export const bedSearchSchema = z.object({
 });
 
 export type BedSearchData = z.infer<typeof bedSearchSchema>;
+
+export const bedAssignSchema = z.object({
+  patientId: z.string().uuid("Invalid patient ID"),
+});
+
+export type BedAssignFormData = z.infer<typeof bedAssignSchema>;
