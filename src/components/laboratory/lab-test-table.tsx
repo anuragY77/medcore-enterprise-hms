@@ -8,6 +8,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Pencil,
+  PlayCircle,
+  FileText,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +35,9 @@ interface LabTestTableProps {
   tests: LabTest[];
   pageSize?: number;
   onEdit: (test: LabTest) => void;
+  onProcess: (test: LabTest) => void;
+  onResult: (test: LabTest) => void;
+  processingId?: string | null;
 }
 
 type SortField = "testId" | "testName" | "category" | "orderedBy" | "testDate" | "status";
@@ -62,7 +68,14 @@ function SortIcon({
   );
 }
 
-export function LabTestTable({ tests, pageSize = 10, onEdit }: LabTestTableProps) {
+export function LabTestTable({
+  tests,
+  pageSize = 10,
+  onEdit,
+  onProcess,
+  onResult,
+  processingId,
+}: LabTestTableProps) {
   const [sortField, setSortField] = useState<SortField>("testId");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [currentPage, setCurrentPage] = useState(1);
@@ -192,13 +205,36 @@ export function LabTestTable({ tests, pageSize = 10, onEdit }: LabTestTableProps
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <button
-                      onClick={() => onEdit(test)}
-                      className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                      title="Edit test"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      {test.status === "Pending" && (
+                        <button
+                          onClick={() => onProcess(test)}
+                          disabled={processingId === test.id}
+                          className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                          title="Mark as in progress"
+                        >
+                          {processingId === test.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <PlayCircle className="h-4 w-4" />
+                          )}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => onResult(test)}
+                        className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        title={test.status === "Completed" ? "View result" : "Enter result"}
+                      >
+                        <FileText className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => onEdit(test)}
+                        className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        title="Edit test"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))

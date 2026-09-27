@@ -28,3 +28,26 @@ export const labTestSearchSchema = z.object({
 });
 
 export type LabTestSearchData = z.infer<typeof labTestSearchSchema>;
+
+export const labResultEntrySchema = z.object({
+  result: z
+    .string()
+    .max(20000, "Result is too long")
+    .refine((value) => value.trim().length > 0, { message: "Result is required" }),
+});
+
+export type LabResultEntryData = z.infer<typeof labResultEntrySchema>;
+
+export const labTestUpdateSchema = z.object({
+  testName: z.string().min(1, "Test name is required").max(200).optional(),
+  category: z.string().min(1, "Category is required").max(100).optional(),
+  orderedBy: z.string().max(200).optional(),
+  notes: z.string().optional(),
+  testDate: z
+    .string()
+    .min(1, "Test date is required")
+    .refine((value) => !Number.isNaN(Date.parse(value)), { message: "Invalid test date" })
+    .optional(),
+});
+
+export type LabTestUpdateData = z.infer<typeof labTestUpdateSchema>;

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Plus, TestTube, Clock, Loader2, CheckCircle2, RefreshCw } from "lucide-react";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
-import { LabTestTable, LabTestForm, type LabTest } from "@/components/laboratory";
+import { LabTestTable, LabTestForm, LabResultDialog, type LabTest } from "@/components/laboratory";
 
 const CATEGORIES = [
   "Blood Test",
@@ -35,6 +35,11 @@ export default function LaboratoryPage() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingTest, setEditingTest] = useState<LabTest | undefined>(undefined);
+
+  const [resultTest, setResultTest] = useState<LabTest | null>(null);
+  const [resultOpen, setResultOpen] = useState(false);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const fetchTests = useCallback(async () => {
     try {
@@ -78,12 +83,51 @@ export default function LaboratoryPage() {
   };
 
   const handleEdit = (test: LabTest) => {
+    setActionError(null);
     setEditingTest(test);
     setFormOpen(true);
   };
 
   const handleFormSuccess = () => {
     setEditingTest(undefined);
+    fetchTests();
+  };
+
+  const handleProcess = async (test: LabTest) => {
+    try {
+      setProcessingId(test.id);
+      setActionError(null);
+      const res = await fetch(`/api/laboratory/${test.id}/process`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        if (res.status === 401 || res.status === 403) {
+          throw new Error("You do not have permission to process lab tests.");
+        }
+        if (res.status === 404) throw new Error("Lab test not found.");
+        if (res.status === 409) throw new Error(err?.error || "Lab test is not pending.");
+        throw new Error(err?.error || "Failed to process lab test");
+      }
+      await fetchTests();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleOpenResult = (test: LabTest) => {
+    setActionError(null);
+    setResultTest(test);
+    setResultOpen(true);
+  };
+
+  const handleResultSuccess = () => {
+    setResultTest(null);
+    setResultOpen(false);
     fetchTests();
   };
 
@@ -208,6 +252,11 @@ export default function LaboratoryPage() {
         </div>
       </form>
 
+      {!loading && actionError && (
+        <div className="mb-4 bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-md text-sm">
+          {actionError}
+        </div>
+      )}
       {loading && (
         <div className="text-center py-12 text-muted-foreground text-sm">Loading lab tests...</div>
       )}
@@ -215,7 +264,13 @@ export default function LaboratoryPage() {
         <div className="text-center py-12 text-destructive text-sm">{error}</div>
       )}
       {!loading && !error && (
-        <LabTestTable tests={tests} onEdit={handleEdit} />
+        <LabTestTable
+          tests={tests}
+          onEdit={handleEdit}
+          onProcess={handleProcess}
+          onResult={handleOpenResult}
+          processingId={processingId}
+        />
       )}
 
       <LabTestForm
@@ -224,6 +279,13 @@ export default function LaboratoryPage() {
         initialData={editingTest}
         mode={editingTest ? "edit" : "create"}
         onSuccess={handleFormSuccess}
+      />
+
+      <LabResultDialog
+        open={resultOpen}
+        onOpenChange={setResultOpen}
+        test={resultTest}
+        onSuccess={handleResultSuccess}
       />
     </div>
   );
