@@ -23,9 +23,9 @@
 
 | | | | | |
 |:--:|:--:|:--:|:--:|:--:|
-| **20** | **50** | **32** | **22** | **9** |
+| **20** | **51** | **32** | **22** | **9** |
 | [Modules](#modules) | API Routes | Pages | DB Tables | RBAC Roles |
-| **77** | **41** | **1,360** | **0** |
+| **78** | **41** | **1,469** | **0** |
 | Components | Permission Keys | Automated Checks | Build Errors |
 
 </div>
@@ -37,9 +37,9 @@
 Most portfolio HMS projects stop at CRUD screens with fake data. MedCore goes further:
 
 - **🔒 Real security** — every API is authenticated and permission-checked server-side; UI gating is a convenience, the backend is the source of truth.
-- **🔁 Real workflows** — admit → assign bed → occupy → discharge → release, with transactional integrity, deadlock-safe locking, and audit trails.
+- **🔁 Real workflows** — admit → assign bed → occupy → transfer → discharge → release, with transactional integrity, deadlock-safe locking, and audit trails.
 - **🧾 Real billing** — invoices, payments, insurance claims, approvals — computed from actual line items, never hard-coded.
-- **🧪 Really tested** — 1,360 automated checks across 15 suites (API contracts, RBAC matrices, DB integrity, concurrency races, static source gates), plus strict `tsc`, ESLint, and production build gates.
+- **🧪 Really tested** — 1,469 automated checks across 16 suites (API contracts, RBAC matrices, DB integrity, concurrency races, static source gates), plus strict `tsc`, ESLint, and production build gates.
 - **🚫 Zero fake data in the UI** — dashboards, ward views, and shift summaries are computed from live queries.
 
 ---
@@ -74,7 +74,7 @@ Most portfolio HMS projects stop at CRUD screens with fake data. MedCore goes fu
 | 3 | 🩺 **Clinical** | Consultations, prescriptions, vitals, medical records — linked to patient charts |
 | 4 | 👨‍⚕️ **Staff** | Doctors & staff directory, departments, scheduling |
 | 5 | 📅 **Appointments** | Scheduling, status lifecycle, doctor assignment |
-| 6 | 🛏️ **Beds & Rooms** | **Inpatient lifecycle: admission → assignment → occupancy → discharge → release** |
+| 6 | 🛏️ **Beds & Rooms** | **Inpatient lifecycle: admission → assignment → occupancy → transfer → discharge → release** |
 | 7 | 💗 **Nursing** | Ward patient board, task queue, live shift metrics, quick actions |
 | 8 | 💊 **Pharmacy** | Inventory, prescriptions, dispensing workflow |
 | 9 | 🧪 **Laboratory** | Orders, results, processing → completion pipeline |
@@ -127,6 +127,9 @@ flowchart LR
     A[🧑 Patient] --> B[📝 Admission<br/>department + doctor<br/>audit: patient.admit]
     B --> C[🛏️ Assign Bed<br/>POST /assign<br/>audit: bed.assign]
     C --> D[🏠 Occupied<br/>beds.patient_id set<br/>invariant enforced]
+    D --> T[🔁 Transfer<br/>POST /transfer — one TX<br/>audit: patient.transfer]
+    T --> D2[🏠 Occupied elsewhere<br/>old bed Available<br/>new bed Occupied]
+    D2 -.->|reusable| T
     D --> E[📤 Discharge<br/>status = Discharged<br/>audit: patient.discharge]
     E --> F[✅ Available<br/>bed released in same TX<br/>audit: bed.release]
     F -.->|reusable| C
@@ -138,9 +141,10 @@ flowchart LR
 - 🚫 **One admission per patient** — a second admit while occupying a bed or still admitted → `409`; readmission allowed after discharge
 - 🧹 **No orphaned beds** — deleting a patient releases their held bed(s) in the same transaction
 - 📏 **Single source of truth** — `beds.patient_id` ⇄ `beds.status` consistency validated in every write path
-- 📜 **Append-only audit** — safe identifiers only, never clinical text; every occupancy change emits `bed.assign` / `bed.release`
+- 📜 **Append-only audit** — safe identifiers only, never clinical text; every occupancy change emits `bed.assign` / `bed.release` / `patient.transfer`
 - ⚖️ **Occupancy cannot be overwritten** via generic `PUT` — workflow endpoints only
-- 📨 **Right people notified** — admit/discharge → attending doctor; assign/release (including on patient delete) → ward nurses of the bed's department
+- 🔁 **Transfer is atomic** — one transaction frees the source bed and occupies the destination (locks patient first, then both beds by ascending id); concurrent transfers of the same patient or into the same bed resolve to exactly one `200`
+- 📨 **Right people notified** — admit/discharge → attending doctor; assign/release (including on patient delete) → ward nurses of the bed's department; transfer → ward nurses of both departments
 
 ### One transaction per state change
 
@@ -165,7 +169,7 @@ sequenceDiagram
     end
 ```
 
-Failed guards return before any write — no audit rows, no notifications, no partial state. The same pattern covers assign, release, discharge, and patient delete.
+Failed guards return before any write — no audit rows, no notifications, no partial state. The same pattern covers assign, release, transfer, discharge, and patient delete.
 
 ---
 
@@ -176,9 +180,9 @@ Failed guards return before any write — no audit rows, no notifications, no pa
 | `npx tsc --noEmit` | ✅ Pass — strict TypeScript, zero errors |
 | `npm run lint` | ✅ Pass — 0 errors |
 | `npm run build` | ✅ Pass — production build |
-| **15 test suites** | ✅ **1,360 / 1,360 checks green** |
+| **16 test suites** | ✅ **1,469 / 1,469 checks green** |
 | — API contract suites | auth, records, beds, pharmacy, lab, surgery, emergency, billing |
-| — Concurrency tests | 8 parallel bed races → exactly-one-success, deterministic 409s |
+| — Concurrency tests | 8 parallel bed races + 5 transfer races (same patient, same destination ×3, vs release, vs assign) → exactly-one-success, deterministic 409s |
 | — DB integrity tests | occupancy invariants, orphan checks, cascade cleanup |
 | — Static source gates | no `console.log`, no fake delays, no mock data in shipped pages |
 | **Schema discipline** | ✅ No migration without an approved gate |
@@ -235,7 +239,7 @@ src/
 │   │   ├── beds/               #    inpatient lifecycle UI
 │   │   ├── nursing/            #    nurse station
 │   │   └── billing|insurance/  #    revenue cycle
-│   └── api/                    # ⚡ 50 route handlers (RBAC + validation)
+│   └── api/                    # ⚡ 51 route handlers (RBAC + validation)
 ├── components/                 # 🧩 77 reusable components
 ├── lib/
 │   ├── auth.ts                 #    NextAuth + session
@@ -264,6 +268,7 @@ src/
 - [x] Billing & insurance revenue cycle
 - [x] Inpatient bed lifecycle (admission → discharge)
 - [x] Bed lifecycle hardening (race-free transactions, double-admission guard, audited + notified)
+- [x] Atomic patient transfer (single-transaction release + assign, audited + notified)
 - [ ] Notification delivery engine
 - [ ] Payment gateway integration
 - [ ] External HL7/FHIR integrations

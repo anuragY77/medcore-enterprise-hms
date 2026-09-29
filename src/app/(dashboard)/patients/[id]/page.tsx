@@ -3,6 +3,7 @@
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import {
   ArrowLeft,
   User,
@@ -20,6 +21,8 @@ import {
   BedDouble,
 } from "lucide-react";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
+import { TransferSheet } from "@/components/beds/transfer-sheet";
+import { hasPermission, type Role } from "@/types/auth";
 import { cn } from "@/lib/utils";
 import { round2 } from "@/lib/billing";
 import type {
@@ -80,6 +83,9 @@ function InfoRow({ icon: Icon, label, value }: { icon: React.ComponentType<{ cla
 export default function PatientRecordPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const { data: session } = useSession();
+  const role = session?.user?.role as Role | undefined;
+  const canTransfer = role ? hasPermission(role, "beds:write") : false;
   const [patient, setPatient] = useState<PatientDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -133,6 +139,8 @@ export default function PatientRecordPage({ params }: { params: Promise<{ id: st
 
   const [billingSummary, setBillingSummary] = useState<BillingSummary | null>(null);
   const [inpatient, setInpatient] = useState<InpatientSummary | null>(null);
+  const [inpatientRefresh, setInpatientRefresh] = useState(0);
+  const [transferOpen, setTransferOpen] = useState(false);
 
   useEffect(() => {
     if (!patient?.id) return;
@@ -162,7 +170,7 @@ export default function PatientRecordPage({ params }: { params: Promise<{ id: st
     return () => {
       cancelled = true;
     };
-  }, [patient?.id, patient?.status]);
+  }, [patient?.id, patient?.status, inpatientRefresh]);
 
 
   useEffect(() => {
@@ -542,6 +550,15 @@ export default function PatientRecordPage({ params }: { params: Promise<{ id: st
                       Admit Patient
                     </Link>
                   )}
+                  {canTransfer && inpatient.bed && (
+                    <button
+                      type="button"
+                      onClick={() => setTransferOpen(true)}
+                      className="px-3 py-1.5 rounded-md border border-border/50 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+                    >
+                      Transfer
+                    </button>
+                  )}
                   {patient.status !== "Discharged" && (
                     <Link
                       href={`/patients/${patient.id}/discharge`}
@@ -676,6 +693,18 @@ export default function PatientRecordPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
       </div>
+
+      {inpatient?.bed && (
+        <TransferSheet
+          open={transferOpen}
+          onOpenChange={setTransferOpen}
+          patientId={patient.id}
+          patientNumber={patient.patientId}
+          sourceBedId={inpatient.bed.id}
+          sourceBedCode={inpatient.bed.bedId}
+          onSuccess={() => setInpatientRefresh((n) => n + 1)}
+        />
+      )}
     </div>
   );
 }
