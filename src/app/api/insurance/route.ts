@@ -8,6 +8,7 @@ import { paginationSchema } from "@/lib/validations/common";
 import { insuranceClaimSchema } from "@/lib/validations/insurance";
 import { isUniqueViolation } from "@/lib/billing";
 import { recordAudit } from "@/lib/audit";
+import { resolveUsersByRole, recordNotifications } from "@/lib/notifications";
 
 const ACTIVE_CLAIM_STATUSES = ["Submitted", "Processing", "Approved"];
 
@@ -299,6 +300,15 @@ export async function POST(request: NextRequest) {
         status: newClaim.status,
         claimAmount: newClaim.claimAmount,
       },
+    });
+
+    const billingRecipients = await resolveUsersByRole("BILLING");
+    await recordNotifications({
+      recipientIds: billingRecipients,
+      type: "BILLING",
+      title: "Insurance claim created",
+      message: `Insurance claim ${newClaim.claimId} has been created.`,
+      action: "/insurance",
     });
 
     return NextResponse.json(newClaim, { status: 201 });

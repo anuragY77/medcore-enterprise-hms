@@ -6,6 +6,7 @@ import { hasPermission } from "@/types/auth";
 import { db, emergencyCases } from "@/lib/db";
 import { paginationSchema } from "@/lib/validations/common";
 import { emergencyCaseSchema } from "@/lib/validations/emergency";
+import { recordAudit } from "@/lib/audit";
 
 export async function GET(request: NextRequest) {
   try {
@@ -160,6 +161,22 @@ export async function POST(request: NextRequest) {
         notes: parsed.data.notes || null,
       })
       .returning();
+
+    await recordAudit({
+      actorId: session.user.id,
+      action: "emergency.case.create",
+      entityType: "emergency_case",
+      entityId: newCase.id,
+      severity: "WARNING",
+      category: "emergency",
+      success: true,
+      metadata: {
+        caseCode: newCase.caseId,
+        patientId: newCase.patientId,
+        triageLevel: newCase.triageLevel,
+        status: newCase.status,
+      },
+    });
 
     return NextResponse.json(newCase, { status: 201 });
   } catch (error) {

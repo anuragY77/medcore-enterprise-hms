@@ -8,6 +8,7 @@ import { paginationSchema } from "@/lib/validations/common";
 import { invoiceSchema } from "@/lib/validations/billing";
 import { computeInvoiceTotal, isUniqueViolation } from "@/lib/billing";
 import { recordAudit } from "@/lib/audit";
+import { resolveUsersByRole, recordNotifications } from "@/lib/notifications";
 
 export async function GET(request: NextRequest) {
   try {
@@ -244,6 +245,15 @@ export async function POST(request: NextRequest) {
         status: newInvoice.status,
         totalAmount: newInvoice.totalAmount,
       },
+    });
+
+    const billingRecipients = await resolveUsersByRole("BILLING");
+    await recordNotifications({
+      recipientIds: billingRecipients,
+      type: "BILLING",
+      title: "Invoice created",
+      message: `Invoice ${newInvoice.invoiceId} has been created.`,
+      action: "/billing",
     });
 
     return NextResponse.json(newInvoice, { status: 201 });

@@ -6,6 +6,7 @@ import { db, insuranceClaims, invoices } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
 import { insuranceClaimSchema } from "@/lib/validations/insurance";
 import { recordAudit } from "@/lib/audit";
+import { resolveUsersByRole, recordNotifications } from "@/lib/notifications";
 
 const ALLOWED_TRANSITIONS: Record<string, string[]> = {
   Submitted: ["Processing", "Approved", "Denied"],
@@ -292,6 +293,17 @@ export async function PUT(
         approvedAmount: result.claim.approvedAmount,
       },
     });
+
+    if (result.previous.status !== result.claim.status) {
+      const billingRecipients = await resolveUsersByRole("BILLING");
+      await recordNotifications({
+        recipientIds: billingRecipients,
+        type: "BILLING",
+        title: "Insurance claim status updated",
+        message: `Insurance claim ${result.claim.claimId} is now ${result.claim.status}.`,
+        action: "/insurance",
+      });
+    }
 
     return NextResponse.json(result.claim);
   } catch (error) {

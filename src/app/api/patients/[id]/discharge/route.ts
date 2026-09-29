@@ -6,6 +6,7 @@ import { db, patients, medicalRecords, beds } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
 import { dischargeSchema } from "@/lib/validations/clinical";
 import { recordAudit } from "@/lib/audit";
+import { resolveUserByName, resolveUsersByDepartmentRole, recordNotifications } from "@/lib/notifications";
 
 export async function POST(
   request: NextRequest,
@@ -53,7 +54,7 @@ export async function POST(
           kind: "ok";
           patient: typeof patients.$inferSelect;
           statusFrom: string;
-          releasedBeds: { id: string; bedId: string }[];
+          releasedBeds: { id: string; bedId: string; department: string }[];
         };
 
     const result: DischargeResult = await db.transaction(async (tx) => {
@@ -73,7 +74,7 @@ export async function POST(
       }
 
       const occupiedBeds = await tx
-        .select({ id: beds.id, bedId: beds.bedId })
+        .select({ id: beds.id, bedId: beds.bedId, department: beds.department })
         .from(beds)
         .where(eq(beds.patientId, id))
         .for("update");
@@ -137,6 +138,35 @@ export async function POST(
         releasedBeds: result.releasedBeds.map((b) => b.bedId),
       },
     });
+
+    const attendingRecipients = await resolveUserByName(result.patient.attendingDoctor);
+    await recordNotifications({
+      recipientIds: attendingRecipients,
+      type: "PATIENT",
+      title: "Patient discharged",
+      message: `Patient ${result.patient.patientId} has been discharged.`,
+      action: `/patients/${result.patient.id}`,
+    });
+
+    const releasedBedsByDepartment = new Map<string, string[]>();
+    for (const bed of result.releasedBeds) {
+      const key = bed.department.trim().toLowerCase();
+      const list = releasedBedsByDepartment.get(key) ?? [];
+      list.push(bed.bedId);
+      releasedBedsByDepartment.set(key, list);
+    }
+
+    for (const [department, bedIds] of releasedBedsByDepartment) {
+      const nurseRecipients = await resolveUsersByDepartmentRole("NURSE", department);
+      const multiple = bedIds.length > 1;
+      await recordNotifications({
+        recipientIds: nurseRecipients,
+        type: "PATIENT",
+        title: "Bed released",
+        message: `Bed${multiple ? "s" : ""} ${bedIds.join(", ")} ${multiple ? "are" : "is"} now available.`,
+        action: "/beds",
+      });
+    }
 
     return NextResponse.json(result.patient, { status: 200 });
   } catch (error) {

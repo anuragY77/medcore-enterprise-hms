@@ -5,6 +5,7 @@ import { hasPermission } from "@/types/auth";
 import { db, labTests } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
 import { labTestUpdateSchema } from "@/lib/validations/laboratory";
+import { recordAudit } from "@/lib/audit";
 
 export async function GET(
   request: NextRequest,
@@ -158,6 +159,21 @@ export async function PUT(
       })
       .where(eq(labTests.id, id))
       .returning();
+
+    await recordAudit({
+      actorId: session.user.id,
+      action: "laboratory.test.update",
+      entityType: "lab_test",
+      entityId: updatedTest.id,
+      severity: "INFO",
+      category: "laboratory",
+      success: true,
+      metadata: {
+        testId: updatedTest.testId,
+        patientId: updatedTest.patientId,
+        status: updatedTest.status,
+      },
+    });
 
     return NextResponse.json(updatedTest);
   } catch (error) {

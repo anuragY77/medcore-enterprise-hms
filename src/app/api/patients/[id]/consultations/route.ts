@@ -5,6 +5,7 @@ import { hasPermission } from "@/types/auth";
 import { db, consultations, patients } from "@/lib/db";
 import { paginationSchema, idParamSchema } from "@/lib/validations/common";
 import { consultationSchema } from "@/lib/validations/clinical";
+import { recordAudit } from "@/lib/audit";
 
 export async function GET(
   request: NextRequest,
@@ -138,6 +139,20 @@ export async function POST(
         followUpDate: parsed.data.followUpDate ? new Date(parsed.data.followUpDate) : null,
       })
       .returning();
+
+    await recordAudit({
+      actorId: session.user.id,
+      action: "consultation.create",
+      entityType: "consultation",
+      entityId: newConsultation.id,
+      severity: "INFO",
+      category: "consultations",
+      success: true,
+      metadata: {
+        patientId: newConsultation.patientId,
+        appointmentId: newConsultation.appointmentId,
+      },
+    });
 
     return NextResponse.json(newConsultation, { status: 201 });
   } catch (error) {

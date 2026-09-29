@@ -6,6 +6,7 @@ import { db, appointments, consultations } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
 import { consultationSchema } from "@/lib/validations/clinical";
 import { recordAudit } from "@/lib/audit";
+import { resolveUserByName, recordNotifications } from "@/lib/notifications";
 
 const ELIGIBLE_STATUSES = ["Scheduled", "Confirmed"];
 
@@ -125,6 +126,15 @@ export async function POST(
         appointmentCode: result.appointment.appointmentId,
         patientId: result.appointment.patientId,
       },
+    });
+
+    const doctorRecipients = await resolveUserByName(result.appointment.doctorName);
+    await recordNotifications({
+      recipientIds: doctorRecipients,
+      type: "PATIENT",
+      title: "Consultation started",
+      message: `Consultation started for appointment ${result.appointment.appointmentId}.`,
+      action: `/patients/${result.appointment.patientId}`,
     });
 
     return NextResponse.json(result.consultation, { status: 201 });

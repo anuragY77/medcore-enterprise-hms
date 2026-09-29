@@ -5,6 +5,7 @@ import { hasPermission } from "@/types/auth";
 import { db, patients, patientAllergies, patientConditions, patientMedications } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
 import { updatePatientSchema } from "@/lib/validations/patient";
+import { recordAudit } from "@/lib/audit";
 
 export async function GET(
   request: NextRequest,
@@ -118,6 +119,21 @@ export async function PUT(
       );
     }
 
+    await recordAudit({
+      actorId: session.user.id,
+      action: "patient.update",
+      entityType: "patient",
+      entityId: updatedPatient.id,
+      severity: "INFO",
+      category: "patients",
+      success: true,
+      metadata: {
+        patientId: updatedPatient.id,
+        patientNumber: updatedPatient.patientId,
+        status: updatedPatient.status,
+      },
+    });
+
     return NextResponse.json(updatedPatient);
   } catch (error) {
     console.error("Failed to update patient:", error);
@@ -163,6 +179,21 @@ export async function DELETE(
         { status: 404 }
       );
     }
+
+    await recordAudit({
+      actorId: session.user.id,
+      action: "patient.delete",
+      entityType: "patient",
+      entityId: deletedPatient.id,
+      severity: "WARNING",
+      category: "patients",
+      success: true,
+      metadata: {
+        patientId: deletedPatient.id,
+        patientNumber: deletedPatient.patientId,
+        status: deletedPatient.status,
+      },
+    });
 
     return NextResponse.json({ message: "Patient deleted" });
   } catch (error) {

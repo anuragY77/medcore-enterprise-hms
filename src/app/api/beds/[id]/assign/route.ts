@@ -6,6 +6,7 @@ import { db, beds, patients } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
 import { bedAssignSchema } from "@/lib/validations/bed";
 import { recordAudit } from "@/lib/audit";
+import { resolveUsersByDepartmentRole, recordNotifications } from "@/lib/notifications";
 
 const OCCUPIED_STATUSES = ["Occupied"];
 
@@ -153,6 +154,15 @@ export async function POST(
         statusFrom: result.previousStatus,
         statusTo: result.bed.status,
       },
+    });
+
+    const nurseRecipients = await resolveUsersByDepartmentRole("NURSE", result.bed.department);
+    await recordNotifications({
+      recipientIds: nurseRecipients,
+      type: "PATIENT",
+      title: "Bed assigned",
+      message: `Bed ${result.bed.bedId} has been assigned.`,
+      action: "/beds",
     });
 
     return NextResponse.json(result.bed, { status: 200 });

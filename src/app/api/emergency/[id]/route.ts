@@ -5,6 +5,7 @@ import { hasPermission } from "@/types/auth";
 import { db, emergencyCases } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
 import { emergencyCaseSchema } from "@/lib/validations/emergency";
+import { recordAudit } from "@/lib/audit";
 
 export async function GET(
   request: NextRequest,
@@ -72,7 +73,7 @@ export async function PUT(
     }
 
     const [existing] = await db
-      .select({ id: emergencyCases.id })
+      .select()
       .from(emergencyCases)
       .where(eq(emergencyCases.id, id))
       .limit(1);
@@ -108,6 +109,24 @@ export async function PUT(
       })
       .where(eq(emergencyCases.id, id))
       .returning();
+
+    await recordAudit({
+      actorId: session.user.id,
+      action: "emergency.case.update",
+      entityType: "emergency_case",
+      entityId: existing.id,
+      severity: "WARNING",
+      category: "emergency",
+      success: true,
+      metadata: {
+        caseCode: existing.caseId,
+        patientId: updatedCase?.patientId ?? existing.patientId,
+        statusFrom: existing.status,
+        statusTo: updatedCase?.status ?? existing.status,
+        triageFrom: existing.triageLevel,
+        triageTo: updatedCase?.triageLevel ?? existing.triageLevel,
+      },
+    });
 
     return NextResponse.json(updatedCase);
   } catch (error) {

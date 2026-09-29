@@ -5,6 +5,7 @@ import { hasPermission } from "@/types/auth";
 import { db, surgeries } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
 import { surgerySchema } from "@/lib/validations/surgery";
+import { recordAudit } from "@/lib/audit";
 
 export async function GET(
   request: NextRequest,
@@ -72,7 +73,7 @@ export async function PUT(
     }
 
     const [existing] = await db
-      .select({ id: surgeries.id })
+      .select()
       .from(surgeries)
       .where(eq(surgeries.id, id))
       .limit(1);
@@ -113,6 +114,23 @@ export async function PUT(
       })
       .where(eq(surgeries.id, id))
       .returning();
+
+    await recordAudit({
+      actorId: session.user.id,
+      action: "surgery.update",
+      entityType: "surgery",
+      entityId: existing.id,
+      severity: "WARNING",
+      category: "surgery",
+      success: true,
+      metadata: {
+        surgeryCode: existing.surgeryId,
+        patientId: updatedSurgery?.patientId ?? existing.patientId,
+        surgeonId: updatedSurgery?.surgeonId ?? existing.surgeonId,
+        statusFrom: existing.status,
+        statusTo: updatedSurgery?.status ?? existing.status,
+      },
+    });
 
     return NextResponse.json(updatedSurgery);
   } catch (error) {
