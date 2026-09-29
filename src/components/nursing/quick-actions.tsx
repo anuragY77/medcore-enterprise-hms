@@ -116,16 +116,33 @@ export function QuickActions({ patients }: QuickActionsProps) {
           <SheetHeader>
             <SheetTitle>Request Transfer</SheetTitle>
           </SheetHeader>
-          <div className="mt-4 p-4">
+          <div className="mt-4 p-4 space-y-3">
             <p className="text-sm text-muted-foreground">
-              Patient transfers are coordinated through bed management.
-              Update bed assignments in the Beds & Rooms module.
+              Open a patient chart to view their current bed and start a transfer.
+              Transfers are applied atomically on the server and require bed management
+              permission.
             </p>
+            <div className="space-y-1">
+              {patients.map((p) => (
+                <a
+                  key={p.id}
+                  href={`/patients/${p.id}`}
+                  className="flex items-center justify-between px-3 py-2 rounded-md border border-border/30 hover:bg-muted/20 transition-colors text-sm"
+                >
+                  <span className="font-medium text-foreground">
+                    {p.lastName}, {p.firstName}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {p.bedId} · Room {p.roomNumber}
+                  </span>
+                </a>
+              ))}
+            </div>
             <a
               href="/beds"
-              className="mt-4 inline-flex items-center text-sm text-primary hover:underline"
+              className="inline-flex items-center text-sm text-primary hover:underline"
             >
-              Go to Beds & Rooms →
+              Go to Beds &amp; Rooms →
             </a>
           </div>
         </SheetContent>
