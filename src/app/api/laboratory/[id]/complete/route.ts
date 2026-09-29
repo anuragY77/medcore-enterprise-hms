@@ -6,6 +6,7 @@ import { db, labTests, medicalRecords } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
 import { labResultEntrySchema } from "@/lib/validations/laboratory";
 import { recordAudit } from "@/lib/audit";
+import { resolveUserByName, recordNotifications } from "@/lib/notifications";
 
 type LabTestRow = typeof labTests.$inferSelect;
 type MedicalRecordRow = typeof medicalRecords.$inferSelect;
@@ -119,6 +120,15 @@ export async function POST(
         consultationId: result.test.consultationId,
         medicalRecordId: result.record.id,
       },
+    });
+
+    const orderingRecipients = await resolveUserByName(result.test.orderedBy);
+    await recordNotifications({
+      recipientIds: orderingRecipients,
+      type: "PATIENT",
+      title: "Lab test completed",
+      message: `Lab test ${result.test.testId} has been completed. Open the patient's records to review the result.`,
+      action: `/patients/${result.test.patientId}/records`,
     });
 
     return NextResponse.json(

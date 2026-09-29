@@ -4,6 +4,8 @@ import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
 import { db, labTests } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
+import { recordAudit } from "@/lib/audit";
+import { resolveUserByName, recordNotifications } from "@/lib/notifications";
 
 export async function POST(
   request: NextRequest,
@@ -57,6 +59,32 @@ export async function POST(
         { status: 409 }
       );
     }
+
+    await recordAudit({
+      actorId: session.user.id,
+      action: "laboratory.test.process",
+      entityType: "lab_test",
+      entityId: updatedTest.id,
+      severity: "INFO",
+      category: "laboratory",
+      success: true,
+      metadata: {
+        testId: updatedTest.testId,
+        patientId: updatedTest.patientId,
+        consultationId: updatedTest.consultationId,
+        statusFrom: "Pending",
+        statusTo: updatedTest.status,
+      },
+    });
+
+    const orderingRecipients = await resolveUserByName(updatedTest.orderedBy);
+    await recordNotifications({
+      recipientIds: orderingRecipients,
+      type: "PATIENT",
+      title: "Lab test in progress",
+      message: `Lab test ${updatedTest.testId} is now in progress.`,
+      action: "/laboratory",
+    });
 
     return NextResponse.json(updatedTest);
   } catch (error) {

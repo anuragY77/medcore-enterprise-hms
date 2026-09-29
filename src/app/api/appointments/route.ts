@@ -6,6 +6,8 @@ import { hasPermission } from "@/types/auth";
 import { db, appointments } from "@/lib/db";
 import { paginationSchema } from "@/lib/validations/common";
 import { appointmentSchema } from "@/lib/validations/appointment";
+import { recordAudit } from "@/lib/audit";
+import { resolveUserByName, recordNotifications } from "@/lib/notifications";
 
 export async function GET(request: NextRequest) {
   try {
@@ -163,6 +165,30 @@ export async function POST(request: NextRequest) {
         notes: parsed.data.notes || null,
       })
       .returning();
+
+    await recordAudit({
+      actorId: session.user.id,
+      action: "appointment.create",
+      entityType: "appointment",
+      entityId: newAppointment.id,
+      severity: "INFO",
+      category: "appointments",
+      success: true,
+      metadata: {
+        appointmentCode: newAppointment.appointmentId,
+        patientId: newAppointment.patientId,
+        status: newAppointment.status,
+      },
+    });
+
+    const doctorRecipients = await resolveUserByName(newAppointment.doctorName);
+    await recordNotifications({
+      recipientIds: doctorRecipients,
+      type: "APPOINTMENT",
+      title: "Appointment scheduled",
+      message: `Appointment ${newAppointment.appointmentId} is scheduled for ${newAppointment.date.toISOString().slice(0, 10)} at ${newAppointment.time}.`,
+      action: `/appointments/${newAppointment.id}`,
+    });
 
     return NextResponse.json(newAppointment, { status: 201 });
   } catch (error) {

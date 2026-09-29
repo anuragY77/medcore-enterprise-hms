@@ -6,6 +6,7 @@ import { db, patients, medicalRecords, beds } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
 import { admissionSchema } from "@/lib/validations/clinical";
 import { recordAudit } from "@/lib/audit";
+import { resolveUserByName, recordNotifications } from "@/lib/notifications";
 
 export async function POST(
   request: NextRequest,
@@ -120,6 +121,15 @@ export async function POST(
         statusFrom: result.statusFrom,
         statusTo: result.patient.status,
       },
+    });
+
+    const attendingRecipients = await resolveUserByName(result.patient.attendingDoctor);
+    await recordNotifications({
+      recipientIds: attendingRecipients,
+      type: "PATIENT",
+      title: "Patient admitted",
+      message: `Patient ${result.patient.patientId} has been admitted to ${result.patient.department}.`,
+      action: `/patients/${result.patient.id}`,
     });
 
     return NextResponse.json(result.patient, { status: 200 });

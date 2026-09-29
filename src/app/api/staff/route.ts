@@ -5,6 +5,7 @@ import { hasPermission } from "@/types/auth";
 import { db, staff } from "@/lib/db";
 import { paginationSchema } from "@/lib/validations/common";
 import { staffSchema } from "@/lib/validations/staff";
+import { recordAudit } from "@/lib/audit";
 
 export async function GET(request: NextRequest) {
   try {
@@ -139,6 +140,22 @@ export async function POST(request: NextRequest) {
         joiningDate: parsed.data.joiningDate ? new Date(parsed.data.joiningDate) : null,
       })
       .returning();
+
+    await recordAudit({
+      actorId: session.user.id,
+      action: "staff.create",
+      entityType: "staff",
+      entityId: newStaff.id,
+      severity: "INFO",
+      category: "staff",
+      success: true,
+      metadata: {
+        staffCode: newStaff.staffId,
+        role: newStaff.role,
+        department: newStaff.department,
+        status: newStaff.status,
+      },
+    });
 
     return NextResponse.json(newStaff, { status: 201 });
   } catch (error) {

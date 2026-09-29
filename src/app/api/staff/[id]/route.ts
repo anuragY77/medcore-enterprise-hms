@@ -5,6 +5,7 @@ import { hasPermission } from "@/types/auth";
 import { db, staff } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
 import { staffSchema } from "@/lib/validations/staff";
+import { recordAudit } from "@/lib/audit";
 
 export async function GET(
   request: NextRequest,
@@ -72,7 +73,7 @@ export async function PUT(
     }
 
     const [existing] = await db
-      .select({ id: staff.id })
+      .select()
       .from(staff)
       .where(eq(staff.id, id))
       .limit(1);
@@ -103,6 +104,23 @@ export async function PUT(
       })
       .where(eq(staff.id, id))
       .returning();
+
+    await recordAudit({
+      actorId: session.user.id,
+      action: "staff.update",
+      entityType: "staff",
+      entityId: existing.id,
+      severity: "INFO",
+      category: "staff",
+      success: true,
+      metadata: {
+        staffCode: existing.staffId,
+        role: updatedStaff?.role ?? existing.role,
+        department: updatedStaff?.department ?? existing.department,
+        statusFrom: existing.status,
+        statusTo: updatedStaff?.status ?? existing.status,
+      },
+    });
 
     return NextResponse.json(updatedStaff);
   } catch (error) {
@@ -143,6 +161,22 @@ export async function DELETE(
     if (!deletedStaff) {
       return NextResponse.json({ error: "Staff not found" }, { status: 404 });
     }
+
+    await recordAudit({
+      actorId: session.user.id,
+      action: "staff.delete",
+      entityType: "staff",
+      entityId: deletedStaff.id,
+      severity: "WARNING",
+      category: "staff",
+      success: true,
+      metadata: {
+        staffCode: deletedStaff.staffId,
+        role: deletedStaff.role,
+        department: deletedStaff.department,
+        status: deletedStaff.status,
+      },
+    });
 
     return NextResponse.json({ message: "Staff deleted" });
   } catch (error) {

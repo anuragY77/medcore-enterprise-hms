@@ -5,6 +5,7 @@ import { hasPermission } from "@/types/auth";
 import { db, beds } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
 import { recordAudit } from "@/lib/audit";
+import { resolveUsersByDepartmentRole, recordNotifications } from "@/lib/notifications";
 
 export async function POST(
   request: NextRequest,
@@ -94,6 +95,15 @@ export async function POST(
         statusFrom: "Occupied",
         statusTo: result.bed.status,
       },
+    });
+
+    const nurseRecipients = await resolveUsersByDepartmentRole("NURSE", result.bed.department);
+    await recordNotifications({
+      recipientIds: nurseRecipients,
+      type: "PATIENT",
+      title: "Bed released",
+      message: `Bed ${result.bed.bedId} is now available.`,
+      action: "/beds",
     });
 
     return NextResponse.json(result.bed, { status: 200 });

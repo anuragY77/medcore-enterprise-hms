@@ -6,6 +6,7 @@ import { hasPermission } from "@/types/auth";
 import { db, surgeries } from "@/lib/db";
 import { paginationSchema } from "@/lib/validations/common";
 import { surgerySchema } from "@/lib/validations/surgery";
+import { recordAudit } from "@/lib/audit";
 
 export async function GET(request: NextRequest) {
   try {
@@ -169,6 +170,23 @@ export async function POST(request: NextRequest) {
         notes: parsed.data.notes || null,
       })
       .returning();
+
+    await recordAudit({
+      actorId: session.user.id,
+      action: "surgery.create",
+      entityType: "surgery",
+      entityId: newSurgery.id,
+      severity: "WARNING",
+      category: "surgery",
+      success: true,
+      metadata: {
+        surgeryCode: newSurgery.surgeryId,
+        patientId: newSurgery.patientId,
+        surgeonId: newSurgery.surgeonId,
+        department: newSurgery.department,
+        status: newSurgery.status,
+      },
+    });
 
     return NextResponse.json(newSurgery, { status: 201 });
   } catch (error) {

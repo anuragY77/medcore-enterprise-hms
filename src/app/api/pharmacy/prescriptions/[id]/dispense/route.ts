@@ -7,6 +7,7 @@ import { idParamSchema } from "@/lib/validations/common";
 import { dispenseSchema } from "@/lib/validations/pharmacy";
 import { pickMatchingMedicine } from "@/lib/pharmacy";
 import { recordAudit } from "@/lib/audit";
+import { resolveUserByName, recordNotifications } from "@/lib/notifications";
 
 type PrescriptionRow = typeof prescriptions.$inferSelect;
 type MedicineRow = typeof pharmacyMedicines.$inferSelect;
@@ -168,6 +169,15 @@ export async function POST(
         unit: result.medicine.unit,
         stockAfter: result.medicine.stockQuantity,
       },
+    });
+
+    const prescriberRecipients = await resolveUserByName(result.prescription.prescribedBy);
+    await recordNotifications({
+      recipientIds: prescriberRecipients,
+      type: "PATIENT",
+      title: "Prescription dispensed",
+      message: `Prescription for ${result.prescription.medicationName} has been dispensed.`,
+      action: `/patients/${result.prescription.patientId}/prescriptions`,
     });
 
     return NextResponse.json(

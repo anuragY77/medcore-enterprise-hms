@@ -6,6 +6,7 @@ import { hasPermission } from "@/types/auth";
 import { db, labTests, patients, consultations } from "@/lib/db";
 import { paginationSchema } from "@/lib/validations/common";
 import { labTestSchema } from "@/lib/validations/laboratory";
+import { recordAudit } from "@/lib/audit";
 
 export async function GET(request: NextRequest) {
   try {
@@ -210,6 +211,22 @@ export async function POST(request: NextRequest) {
         completedAt: null,
       })
       .returning();
+
+    await recordAudit({
+      actorId: session.user.id,
+      action: "laboratory.test.create",
+      entityType: "lab_test",
+      entityId: newTest.id,
+      severity: "INFO",
+      category: "laboratory",
+      success: true,
+      metadata: {
+        testId: newTest.testId,
+        patientId: newTest.patientId,
+        consultationId: newTest.consultationId,
+        status: newTest.status,
+      },
+    });
 
     return NextResponse.json(newTest, { status: 201 });
   } catch (error) {

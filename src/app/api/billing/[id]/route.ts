@@ -7,6 +7,7 @@ import { idParamSchema } from "@/lib/validations/common";
 import { invoiceSchema } from "@/lib/validations/billing";
 import { computeInvoiceTotal } from "@/lib/billing";
 import { recordAudit } from "@/lib/audit";
+import { resolveUsersByRole, recordNotifications } from "@/lib/notifications";
 
 export async function GET(
   request: NextRequest,
@@ -87,7 +88,11 @@ export async function PUT(
 
     type PutResult =
       | { kind: "error"; status: number; error: string }
-      | { kind: "ok"; invoice: typeof invoices.$inferSelect };
+      | {
+          kind: "ok";
+          invoice: typeof invoices.$inferSelect;
+          previousStatus: string;
+        };
 
     const result: PutResult = await db.transaction(async (tx) => {
       const [existing] = await tx
@@ -223,7 +228,7 @@ export async function PUT(
         .where(eq(invoices.id, id))
         .returning();
 
-      return { kind: "ok", invoice: updatedInvoice };
+      return { kind: "ok", invoice: updatedInvoice, previousStatus: existing.status };
     });
 
     if (result.kind === "error") {
@@ -245,6 +250,17 @@ export async function PUT(
         totalAmount: result.invoice.totalAmount,
       },
     });
+
+    if (result.previousStatus !== result.invoice.status) {
+      const billingRecipients = await resolveUsersByRole("BILLING");
+      await recordNotifications({
+        recipientIds: billingRecipients,
+        type: "BILLING",
+        title: "Invoice status updated",
+        message: `Invoice ${result.invoice.invoiceId} is now ${result.invoice.status}.`,
+        action: "/billing",
+      });
+    }
 
     return NextResponse.json(result.invoice);
   } catch (error) {
@@ -336,6 +352,15 @@ export async function DELETE(
         status: result.invoice.status,
         totalAmount: result.invoice.totalAmount,
       },
+    });
+
+    const billingRecipients = await resolveUsersByRole("BILLING");
+    await recordNotifications({
+      recipientIds: billingRecipients,
+      type: "BILLING",
+      title: "Invoice deleted",
+      message: `Invoice ${result.invoice.invoiceId} has been deleted.`,
+      action: "/billing",
     });
 
     return NextResponse.json({ message: "Invoice deleted" });

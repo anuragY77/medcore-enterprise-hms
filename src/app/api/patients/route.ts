@@ -6,6 +6,7 @@ import { hasPermission } from "@/types/auth";
 import { db, patients } from "@/lib/db";
 import { paginationSchema } from "@/lib/validations/common";
 import { patientDateOfBirthSchema } from "@/lib/validations/patient";
+import { recordAudit } from "@/lib/audit";
 
 export async function GET(request: NextRequest) {
   try {
@@ -166,6 +167,21 @@ export async function POST(request: NextRequest) {
         emergencyContactPhone: emergencyContactPhone || null,
       })
       .returning();
+
+    await recordAudit({
+      actorId: session.user.id,
+      action: "patient.create",
+      entityType: "patient",
+      entityId: newPatient.id,
+      severity: "INFO",
+      category: "patients",
+      success: true,
+      metadata: {
+        patientId: newPatient.id,
+        patientNumber: newPatient.patientId,
+        status: newPatient.status,
+      },
+    });
 
     return NextResponse.json(newPatient, { status: 201 });
   } catch (error) {

@@ -5,6 +5,8 @@ import { hasPermission } from "@/types/auth";
 import { db, appointments } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
 import { appointmentSchema } from "@/lib/validations/appointment";
+import { recordAudit } from "@/lib/audit";
+import { resolveUserByName, recordNotifications } from "@/lib/notifications";
 
 export async function GET(
   request: NextRequest,
@@ -72,7 +74,7 @@ export async function PUT(
     }
 
     const [existing] = await db
-      .select({ id: appointments.id })
+      .select()
       .from(appointments)
       .where(eq(appointments.id, id))
       .limit(1);
@@ -108,6 +110,35 @@ export async function PUT(
       })
       .where(eq(appointments.id, id))
       .returning();
+
+    const statusChanged = updatedAppointment.status !== existing.status;
+
+    await recordAudit({
+      actorId: session.user.id,
+      action: "appointment.update",
+      entityType: "appointment",
+      entityId: updatedAppointment.id,
+      severity: "INFO",
+      category: "appointments",
+      success: true,
+      metadata: {
+        appointmentCode: updatedAppointment.appointmentId,
+        patientId: updatedAppointment.patientId,
+        statusFrom: existing.status,
+        statusTo: updatedAppointment.status,
+      },
+    });
+
+    if (statusChanged) {
+      const doctorRecipients = await resolveUserByName(updatedAppointment.doctorName);
+      await recordNotifications({
+        recipientIds: doctorRecipients,
+        type: "APPOINTMENT",
+        title: "Appointment status updated",
+        message: `Appointment ${updatedAppointment.appointmentId} is now ${updatedAppointment.status}.`,
+        action: `/appointments/${updatedAppointment.id}`,
+      });
+    }
 
     return NextResponse.json(updatedAppointment);
   } catch (error) {
@@ -148,6 +179,21 @@ export async function DELETE(
     if (!deletedAppointment) {
       return NextResponse.json({ error: "Appointment not found" }, { status: 404 });
     }
+
+    await recordAudit({
+      actorId: session.user.id,
+      action: "appointment.delete",
+      entityType: "appointment",
+      entityId: deletedAppointment.id,
+      severity: "WARNING",
+      category: "appointments",
+      success: true,
+      metadata: {
+        appointmentCode: deletedAppointment.appointmentId,
+        patientId: deletedAppointment.patientId,
+        status: deletedAppointment.status,
+      },
+    });
 
     return NextResponse.json({ message: "Appointment deleted" });
   } catch (error) {

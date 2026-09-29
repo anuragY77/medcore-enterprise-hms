@@ -5,6 +5,7 @@ import { hasPermission } from "@/types/auth";
 import { db, prescriptions, patients } from "@/lib/db";
 import { paginationSchema, idParamSchema } from "@/lib/validations/common";
 import { prescriptionSchema } from "@/lib/validations/clinical";
+import { recordAudit } from "@/lib/audit";
 
 export async function GET(
   request: NextRequest,
@@ -149,6 +150,21 @@ export async function POST(
         endDate: parsed.data.endDate ? new Date(parsed.data.endDate) : null,
       })
       .returning();
+
+    await recordAudit({
+      actorId: session.user.id,
+      action: "prescription.create",
+      entityType: "prescription",
+      entityId: newPrescription.id,
+      severity: "INFO",
+      category: "pharmacy",
+      success: true,
+      metadata: {
+        patientId: newPrescription.patientId,
+        consultationId: newPrescription.consultationId,
+        status: newPrescription.status,
+      },
+    });
 
     return NextResponse.json(newPrescription, { status: 201 });
   } catch (error) {
