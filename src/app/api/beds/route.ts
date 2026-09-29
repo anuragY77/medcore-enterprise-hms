@@ -5,6 +5,8 @@ import { hasPermission } from "@/types/auth";
 import { db, beds, patients } from "@/lib/db";
 import { paginationSchema } from "@/lib/validations/common";
 import { bedSchema } from "@/lib/validations/bed";
+import { recordAudit } from "@/lib/audit";
+import { resolveUsersByDepartmentRole, recordNotifications } from "@/lib/notifications";
 
 const BED_SELECT = {
   id: beds.id,
@@ -166,52 +168,112 @@ export async function POST(request: NextRequest) {
     }
 
     const data = parsed.data;
+    const patientId = data.patientId;
 
-    if (data.status === "Occupied" && !data.patientId) {
+    if (data.status === "Occupied" && !patientId) {
       return NextResponse.json(
         { error: "Validation failed", details: { status: ["Occupied beds require a patient"] } },
         { status: 400 }
       );
     }
-    if (data.patientId && data.status !== "Occupied") {
+    if (patientId && data.status !== "Occupied") {
       return NextResponse.json(
         { error: "Validation failed", details: { patientId: ["Patient assignment requires status Occupied"] } },
         { status: 400 }
       );
     }
 
-    if (data.patientId) {
-      const result = await db.transaction(async (tx) => {
-        const [patient] = await tx
-          .select({ id: patients.id, status: patients.status })
-          .from(patients)
-          .where(eq(patients.id, data.patientId as string))
-          .limit(1)
-          .for("update");
+    if (patientId) {
+      type CreateOccupiedResult =
+        | { kind: "error"; status: number; error: string }
+        | { kind: "ok"; bed: typeof beds.$inferSelect };
 
-        if (!patient) {
-          return { status: 404, error: "Patient not found" };
+      let result: CreateOccupiedResult | null = null;
+      for (let attempt = 0; attempt < 5 && !result; attempt++) {
+        try {
+          result = await db.transaction(async (tx) => {
+            const [patient] = await tx
+              .select({ id: patients.id, status: patients.status })
+              .from(patients)
+              .where(eq(patients.id, patientId))
+              .limit(1)
+              .for("update");
+
+            if (!patient) {
+              return { kind: "error" as const, status: 404, error: "Patient not found" };
+            }
+            if (patient.status === "Discharged") {
+              return { kind: "error" as const, status: 409, error: "Patient has been discharged" };
+            }
+
+            const [existing] = await tx
+              .select({ id: beds.id })
+              .from(beds)
+              .where(eq(beds.patientId, patientId))
+              .limit(1);
+
+            if (existing) {
+              return { kind: "error" as const, status: 409, error: "Patient already occupies a bed" };
+            }
+
+            const bedCount = await tx.select({ count: sql<number>`count(*)` }).from(beds);
+            const nextNumber = Number(bedCount[0]?.count ?? 0) + 1 + attempt;
+            const bedId = `BED-${String(nextNumber).padStart(3, "0")}`;
+
+            const [row] = await tx
+              .insert(beds)
+              .values({
+                bedId,
+                roomNumber: data.roomNumber,
+                department: data.department,
+                ward: data.ward || null,
+                type: data.type,
+                status: data.status,
+                patientId,
+              })
+              .returning();
+
+            return { kind: "ok" as const, bed: row };
+          });
+        } catch (error) {
+          if (isUniqueViolation(error) && attempt < 4) continue;
+          throw error;
         }
-        if (patient.status === "Discharged") {
-          return { status: 409, error: "Patient has been discharged" };
-        }
+      }
 
-        const [existing] = await tx
-          .select({ id: beds.id })
-          .from(beds)
-          .where(eq(beds.patientId, data.patientId as string))
-          .limit(1);
-
-        if (existing) {
-          return { status: 409, error: "Patient already occupies a bed" };
-        }
-
-        return { status: 0 };
-      });
-
-      if (result.status !== 0) {
+      if (!result) {
+        return NextResponse.json({ error: "Failed to create bed" }, { status: 500 });
+      }
+      if (result.kind === "error") {
         return NextResponse.json({ error: result.error }, { status: result.status });
       }
+
+      await recordAudit({
+        actorId: session.user.id,
+        action: "bed.assign",
+        entityType: "bed",
+        entityId: result.bed.id,
+        severity: "INFO",
+        category: "beds",
+        success: true,
+        metadata: {
+          bedId: result.bed.bedId,
+          patientId: result.bed.patientId,
+          statusFrom: "Available",
+          statusTo: result.bed.status,
+        },
+      });
+
+      const nurseRecipients = await resolveUsersByDepartmentRole("NURSE", result.bed.department);
+      await recordNotifications({
+        recipientIds: nurseRecipients,
+        type: "PATIENT",
+        title: "Bed assigned",
+        message: `Bed ${result.bed.bedId} has been assigned.`,
+        action: "/beds",
+      });
+
+      return NextResponse.json(result.bed, { status: 201 });
     }
 
     let newBed = null;
@@ -229,7 +291,7 @@ export async function POST(request: NextRequest) {
             ward: data.ward || null,
             type: data.type,
             status: data.status,
-            patientId: data.patientId || null,
+            patientId: null,
           })
           .returning();
         newBed = row;

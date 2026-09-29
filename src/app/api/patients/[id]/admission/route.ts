@@ -78,6 +78,27 @@ export async function POST(
         };
       }
 
+      if (patient.status !== "Discharged") {
+        const [priorAdmission] = await tx
+          .select({ id: medicalRecords.id })
+          .from(medicalRecords)
+          .where(
+            and(
+              eq(medicalRecords.patientId, id),
+              eq(medicalRecords.title, "Patient Admission")
+            )
+          )
+          .limit(1);
+
+        if (priorAdmission) {
+          return {
+            kind: "error",
+            status: 409,
+            error: "Patient is already admitted",
+          };
+        }
+      }
+
       const [updatedPatient] = await tx
         .update(patients)
         .set({

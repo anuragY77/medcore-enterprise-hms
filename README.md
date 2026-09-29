@@ -25,7 +25,7 @@
 |:--:|:--:|:--:|:--:|:--:|
 | **20** | **50** | **32** | **22** | **9** |
 | [Modules](#modules) | API Routes | Pages | DB Tables | RBAC Roles |
-| **77** | **41** | **953** | **0** |
+| **77** | **41** | **1,360** | **0** |
 | Components | Permission Keys | Automated Checks | Build Errors |
 
 </div>
@@ -39,7 +39,7 @@ Most portfolio HMS projects stop at CRUD screens with fake data. MedCore goes fu
 - **🔒 Real security** — every API is authenticated and permission-checked server-side; UI gating is a convenience, the backend is the source of truth.
 - **🔁 Real workflows** — admit → assign bed → occupy → discharge → release, with transactional integrity, deadlock-safe locking, and audit trails.
 - **🧾 Real billing** — invoices, payments, insurance claims, approvals — computed from actual line items, never hard-coded.
-- **🧪 Really tested** — 953 automated checks across 9 suites (API contracts, RBAC matrices, DB integrity, concurrency races, static source gates), plus strict `tsc`, ESLint, and production build gates.
+- **🧪 Really tested** — 1,360 automated checks across 15 suites (API contracts, RBAC matrices, DB integrity, concurrency races, static source gates), plus strict `tsc`, ESLint, and production build gates.
 - **🚫 Zero fake data in the UI** — dashboards, ward views, and shift summaries are computed from live queries.
 
 ---
@@ -135,9 +135,37 @@ flowchart LR
 **Guarantees:**
 - ♟️ **Deadlock-safe** — consistent lock order: patient row → bed row
 - 🚫 **Double-booking impossible** — concurrent assign races resolve to exactly one `200` + one `409`
+- 🚫 **One admission per patient** — a second admit while occupying a bed or still admitted → `409`; readmission allowed after discharge
+- 🧹 **No orphaned beds** — deleting a patient releases their held bed(s) in the same transaction
 - 📏 **Single source of truth** — `beds.patient_id` ⇄ `beds.status` consistency validated in every write path
-- 📜 **Append-only audit** — safe identifiers only, never clinical text
+- 📜 **Append-only audit** — safe identifiers only, never clinical text; every occupancy change emits `bed.assign` / `bed.release`
 - ⚖️ **Occupancy cannot be overwritten** via generic `PUT` — workflow endpoints only
+- 📨 **Right people notified** — admit/discharge → attending doctor; assign/release (including on patient delete) → ward nurses of the bed's department
+
+### One transaction per state change
+
+```mermaid
+sequenceDiagram
+    participant UI as Client / UI
+    participant API as API route (RBAC + Zod)
+    participant DB as PostgreSQL
+    participant AUD as audit_logs
+    participant N as Notifications
+
+    UI->>API: POST /api/patients/:id/admission
+    API->>DB: BEGIN, lock patient (FOR UPDATE)
+    alt already admitted or occupying a bed
+        API-->>UI: 409 Conflict, zero writes, zero side effects
+    else eligible
+        API->>DB: insert Admission record, status = Active
+        API->>DB: COMMIT
+        API->>AUD: patient.admit (safe IDs only)
+        API->>N: attending-doctor notification
+        API-->>UI: 200 OK
+    end
+```
+
+Failed guards return before any write — no audit rows, no notifications, no partial state. The same pattern covers assign, release, discharge, and patient delete.
 
 ---
 
@@ -148,9 +176,9 @@ flowchart LR
 | `npx tsc --noEmit` | ✅ Pass — strict TypeScript, zero errors |
 | `npm run lint` | ✅ Pass — 0 errors |
 | `npm run build` | ✅ Pass — production build |
-| **9 test suites** | ✅ **953 / 953 checks green** |
+| **15 test suites** | ✅ **1,360 / 1,360 checks green** |
 | — API contract suites | auth, records, beds, pharmacy, lab, surgery, emergency, billing |
-| — Concurrency tests | parallel assign/discharge races → deterministic outcomes |
+| — Concurrency tests | 8 parallel bed races → exactly-one-success, deterministic 409s |
 | — DB integrity tests | occupancy invariants, orphan checks, cascade cleanup |
 | — Static source gates | no `console.log`, no fake delays, no mock data in shipped pages |
 | **Schema discipline** | ✅ No migration without an approved gate |
@@ -235,6 +263,7 @@ src/
 - [x] 20 operational modules with live data
 - [x] Billing & insurance revenue cycle
 - [x] Inpatient bed lifecycle (admission → discharge)
+- [x] Bed lifecycle hardening (race-free transactions, double-admission guard, audited + notified)
 - [ ] Notification delivery engine
 - [ ] Payment gateway integration
 - [ ] External HL7/FHIR integrations
