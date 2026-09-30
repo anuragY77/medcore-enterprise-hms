@@ -67,7 +67,7 @@ export function WardPatientTable({ patients, loading }: WardPatientTableProps) {
   return (
     <div className="bg-card rounded-lg border border-border/50 shadow-sm overflow-hidden">
       <div className="px-4 py-3 border-b border-border/50 bg-muted/30">
-        <h3 className="text-sm font-semibold text-foreground">Ward Patient List</h3>
+        <h2 className="text-sm font-semibold text-foreground">Ward Patient List</h2>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">

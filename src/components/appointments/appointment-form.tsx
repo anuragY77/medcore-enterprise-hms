@@ -124,10 +124,14 @@ export function AppointmentForm({ initialData, mode = "create" }: AppointmentFor
         />
 
         <div>
-          <label className="block text-sm font-medium text-foreground mb-1">
+          <label
+            htmlFor="appt-doctorName"
+            className="block text-sm font-medium text-foreground mb-1"
+          >
             Doctor Name <span className="text-destructive">*</span>
           </label>
           <input
+            id="appt-doctorName"
             {...register("doctorName")}
             placeholder="Dr. Smith"
             className="w-full px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -138,10 +142,14 @@ export function AppointmentForm({ initialData, mode = "create" }: AppointmentFor
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-foreground mb-1">
+          <label
+            htmlFor="appt-department"
+            className="block text-sm font-medium text-foreground mb-1"
+          >
             Department <span className="text-destructive">*</span>
           </label>
           <select
+            id="appt-department"
             {...register("department")}
             className="w-full px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           >
@@ -156,10 +164,14 @@ export function AppointmentForm({ initialData, mode = "create" }: AppointmentFor
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-foreground mb-1">
+          <label
+            htmlFor="appt-date"
+            className="block text-sm font-medium text-foreground mb-1"
+          >
             Date <span className="text-destructive">*</span>
           </label>
           <input
+            id="appt-date"
             type="date"
             {...register("date")}
             className="w-full px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -170,10 +182,14 @@ export function AppointmentForm({ initialData, mode = "create" }: AppointmentFor
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-foreground mb-1">
+          <label
+            htmlFor="appt-time"
+            className="block text-sm font-medium text-foreground mb-1"
+          >
             Time <span className="text-destructive">*</span>
           </label>
           <select
+            id="appt-time"
             {...register("time")}
             className="w-full px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           >
@@ -188,10 +204,14 @@ export function AppointmentForm({ initialData, mode = "create" }: AppointmentFor
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-foreground mb-1">
+          <label
+            htmlFor="appt-type"
+            className="block text-sm font-medium text-foreground mb-1"
+          >
             Type <span className="text-destructive">*</span>
           </label>
           <select
+            id="appt-type"
             {...register("type")}
             className="w-full px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           >
@@ -205,10 +225,14 @@ export function AppointmentForm({ initialData, mode = "create" }: AppointmentFor
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-foreground mb-1">
+          <label
+            htmlFor="appt-status"
+            className="block text-sm font-medium text-foreground mb-1"
+          >
             Status <span className="text-destructive">*</span>
           </label>
           <select
+            id="appt-status"
             {...register("status")}
             className="w-full px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           >
@@ -224,8 +248,14 @@ export function AppointmentForm({ initialData, mode = "create" }: AppointmentFor
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-foreground mb-1">Reason</label>
+        <label
+          htmlFor="appt-reason"
+          className="block text-sm font-medium text-foreground mb-1"
+        >
+          Reason
+        </label>
         <textarea
+          id="appt-reason"
           {...register("reason")}
           rows={2}
           placeholder="Reason for appointment"
@@ -234,8 +264,14 @@ export function AppointmentForm({ initialData, mode = "create" }: AppointmentFor
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-foreground mb-1">Notes</label>
+        <label
+          htmlFor="appt-notes"
+          className="block text-sm font-medium text-foreground mb-1"
+        >
+          Notes
+        </label>
         <textarea
+          id="appt-notes"
           {...register("notes")}
           rows={2}
           placeholder="Additional notes"

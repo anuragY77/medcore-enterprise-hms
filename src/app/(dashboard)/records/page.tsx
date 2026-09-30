@@ -175,6 +175,7 @@ export default function RecordsHubPage() {
                 className="flex-1 min-w-[200px] px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
               />
               <select
+                aria-label="Record type"
                 value={typeFilter}
                 onChange={(e) => handleTypeFilter(e.target.value)}
                 className="px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -193,6 +194,7 @@ export default function RecordsHubPage() {
                 Search
               </button>
               <button
+                aria-label="Refresh list"
                 type="button"
                 onClick={handleRefresh}
                 className="px-3 py-2 rounded-md border border-border/50 text-sm text-muted-foreground hover:bg-muted transition-colors"

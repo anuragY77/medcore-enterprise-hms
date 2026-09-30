@@ -215,6 +215,7 @@ export default function SecurityPage() {
                 className="px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 w-[160px]"
               />
               <select
+                aria-label="Result"
                 value={successFilter}
                 onChange={(e) => handleSuccessFilter(e.target.value)}
                 className="px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -244,6 +245,7 @@ export default function SecurityPage() {
                 Search
               </button>
               <button
+                aria-label="Refresh list"
                 type="button"
                 onClick={handleRefresh}
                 className="px-3 py-2 rounded-md border border-border/50 text-sm text-muted-foreground hover:bg-muted transition-colors"

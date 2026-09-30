@@ -70,7 +70,12 @@ export function AuditLogTable({ logs, meta, onPageChange }: AuditLogTableProps) 
 
   return (
     <div className="bg-card rounded-lg border border-border/50 shadow-sm overflow-hidden">
-      <div className="overflow-x-auto">
+        <div
+          className="overflow-x-auto"
+          tabIndex={0}
+          role="region"
+          aria-label="Audit log table"
+        >
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/50 bg-muted/30">
@@ -128,7 +133,7 @@ export function AuditLogTable({ logs, meta, onPageChange }: AuditLogTableProps) 
                       <div className="min-w-0">
                         <p className="truncate">{log.entityType}</p>
                         {log.entityId && (
-                          <p className="text-xs truncate opacity-70">{log.entityId}</p>
+                          <p className="text-xs truncate">{log.entityId}</p>
                         )}
                       </div>
                     ) : (
@@ -183,6 +188,7 @@ export function AuditLogTable({ logs, meta, onPageChange }: AuditLogTableProps) 
             <button
               onClick={() => onPageChange(Math.max(1, page - 1))}
               disabled={page === 1}
+              aria-label="Previous page"
               className="p-1.5 rounded-md hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronLeft className="h-4 w-4" />
@@ -204,6 +210,7 @@ export function AuditLogTable({ logs, meta, onPageChange }: AuditLogTableProps) 
             <button
               onClick={() => onPageChange(Math.min(totalPages, page + 1))}
               disabled={page === totalPages}
+              aria-label="Next page"
               className="p-1.5 rounded-md hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronRight className="h-4 w-4" />

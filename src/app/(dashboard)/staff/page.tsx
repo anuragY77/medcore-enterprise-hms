@@ -102,6 +102,7 @@ export default function StaffPage() {
             className="flex-1 min-w-[200px] px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
           <select
+            aria-label="Status"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             className="px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -112,6 +113,7 @@ export default function StaffPage() {
             <option value="On Leave">On Leave</option>
           </select>
           <select
+            aria-label="Department"
             value={departmentFilter}
             onChange={(e) => setDepartmentFilter(e.target.value)}
             className="px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -122,6 +124,7 @@ export default function StaffPage() {
             ))}
           </select>
           <select
+            aria-label="Role"
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
             className="px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"

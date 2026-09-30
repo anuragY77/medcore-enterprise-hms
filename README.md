@@ -186,6 +186,10 @@ Failed guards return before any write — no audit rows, no notifications, no pa
 | — DB integrity tests | occupancy invariants, orphan checks, cascade cleanup |
 | — Notification delivery | unread-count badge poll, recipient isolation, mark-read badge sync, poll safety |
 | — Static source gates | no `console.log`, no fake delays, no mock data in shipped pages |
+| **M11-M audit harness** | ✅ **827 / 827 checks green** (responsive sweep, axe, keyboard, states, cross-browser, security) |
+| **axe-core (WCAG)** | ✅ **0 violations across 29 routes** |
+| **Lighthouse (desktop + mobile)** | ✅ login 100/100/100/100 · dashboard 100/100/100/100 · patients 100/100/100/100 · mobile 96/100/100/100 — all categories > 90 |
+| **Error boundaries** | ✅ live-tested 9/9 — root + dashboard loading/error, global-error, friendly 404 |
 | **Schema discipline** | ✅ No migration without an approved gate |
 
 ---
@@ -271,6 +275,7 @@ src/
 - [x] Bed lifecycle hardening (race-free transactions, double-admission guard, audited + notified)
 - [x] Atomic patient transfer (single-transaction release + assign, audited + notified)
 - [x] Notification delivery engine
+- [x] Phase 13 — testing, responsiveness & polish (accessibility, error boundaries, Lighthouse, cross-browser)
 - [ ] Payment gateway integration
 - [ ] External HL7/FHIR integrations
 

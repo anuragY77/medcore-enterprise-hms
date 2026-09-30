@@ -28,7 +28,7 @@ export default function RecordsPage() {
           Clinical document management
         </p>
       </div>
-      <div className="mb-4 flex gap-2">
+      <div className="mb-4 flex flex-wrap gap-2">
         {["All", "Clinical", "Lab", "Imaging", "Administrative", "Discharge"].map(
           (type) => (
             <button
@@ -36,7 +36,7 @@ export default function RecordsPage() {
               onClick={() => setRecordTypeFilter(type)}
               className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                 recordTypeFilter === type
-                  ? "bg-emerald-600 text-white"
+                  ? "bg-primary text-primary-foreground"
                   : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               }`}
             >

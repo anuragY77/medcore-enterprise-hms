@@ -28,7 +28,7 @@ export function RoomStatus({ beds }: RoomStatusProps) {
   return (
     <div className="bg-card rounded-lg border border-border/50 p-4 shadow-sm mb-6">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-foreground">Room Overview</h3>
+        <h2 className="text-sm font-semibold text-foreground">Room Overview</h2>
         <span className="text-xs text-muted-foreground">
           Occupancy: <span className="font-medium text-foreground">{occupancyRate}%</span>
         </span>
