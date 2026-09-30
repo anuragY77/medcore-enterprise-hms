@@ -23,9 +23,9 @@
 
 | | | | | |
 |:--:|:--:|:--:|:--:|:--:|
-| **20** | **51** | **32** | **22** | **9** |
+| **20** | **52** | **32** | **22** | **9** |
 | [Modules](#modules) | API Routes | Pages | DB Tables | RBAC Roles |
-| **78** | **41** | **1,469** | **0** |
+| **79** | **41** | **1,549** | **0** |
 | Components | Permission Keys | Automated Checks | Build Errors |
 
 </div>
@@ -39,7 +39,7 @@ Most portfolio HMS projects stop at CRUD screens with fake data. MedCore goes fu
 - **🔒 Real security** — every API is authenticated and permission-checked server-side; UI gating is a convenience, the backend is the source of truth.
 - **🔁 Real workflows** — admit → assign bed → occupy → transfer → discharge → release, with transactional integrity, deadlock-safe locking, and audit trails.
 - **🧾 Real billing** — invoices, payments, insurance claims, approvals — computed from actual line items, never hard-coded.
-- **🧪 Really tested** — 1,469 automated checks across 16 suites (API contracts, RBAC matrices, DB integrity, concurrency races, static source gates), plus strict `tsc`, ESLint, and production build gates.
+- **🧪 Really tested** — 1,549 automated checks across 17 suites (API contracts, RBAC matrices, DB integrity, concurrency races, notification delivery, static source gates), plus strict `tsc`, ESLint, and production build gates.
 - **🚫 Zero fake data in the UI** — dashboards, ward views, and shift summaries are computed from live queries.
 
 ---
@@ -84,7 +84,7 @@ Most portfolio HMS projects stop at CRUD screens with fake data. MedCore goes fu
 | 13 | 🛡️ **Insurance** | Claims, approval workflow, coverage |
 | 14 | 📦 **Inventory** | Stock tracking, levels, alerts |
 | 15 | 📁 **Records** | Cross-patient records hub with relational details |
-| 16 | 🔔 **Notifications** | Per-user inbox |
+| 16 | 🔔 **Notifications** | Per-user inbox with live topbar bell (unread badge) |
 | 17 | 📈 **Reports** | Aggregated operational reporting |
 | 18 | 🕵️ **Audit Log** | Immutable security audit trail with actor/action/category |
 | 19 | 👥 **Users & Roles** | Account management, role assignment |
@@ -180,10 +180,11 @@ Failed guards return before any write — no audit rows, no notifications, no pa
 | `npx tsc --noEmit` | ✅ Pass — strict TypeScript, zero errors |
 | `npm run lint` | ✅ Pass — 0 errors |
 | `npm run build` | ✅ Pass — production build |
-| **16 test suites** | ✅ **1,469 / 1,469 checks green** |
+| **17 test suites** | ✅ **1,549 / 1,549 checks green** |
 | — API contract suites | auth, records, beds, pharmacy, lab, surgery, emergency, billing |
 | — Concurrency tests | 8 parallel bed races + 5 transfer races (same patient, same destination ×3, vs release, vs assign) → exactly-one-success, deterministic 409s |
 | — DB integrity tests | occupancy invariants, orphan checks, cascade cleanup |
+| — Notification delivery | unread-count badge poll, recipient isolation, mark-read badge sync, poll safety |
 | — Static source gates | no `console.log`, no fake delays, no mock data in shipped pages |
 | **Schema discipline** | ✅ No migration without an approved gate |
 
@@ -269,7 +270,7 @@ src/
 - [x] Inpatient bed lifecycle (admission → discharge)
 - [x] Bed lifecycle hardening (race-free transactions, double-admission guard, audited + notified)
 - [x] Atomic patient transfer (single-transaction release + assign, audited + notified)
-- [ ] Notification delivery engine
+- [x] Notification delivery engine
 - [ ] Payment gateway integration
 - [ ] External HL7/FHIR integrations
 
