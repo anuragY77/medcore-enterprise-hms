@@ -88,13 +88,13 @@ export function TaskQueue({ tasks, loading }: TaskQueueProps) {
                   return (
                     <div
                       key={task.id}
-                      className="flex items-center gap-3 p-2.5 rounded-lg opacity-50"
+                      className="flex items-center gap-3 p-2.5 rounded-lg"
                     >
                       <div className="h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-slate-100">
                         <Icon className="h-4 w-4 text-slate-400" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-muted-foreground line-through truncate">{task.label}</p>
+                        <p className="text-sm text-slate-600 line-through truncate">{task.label}</p>
                       </div>
                     </div>
                   );

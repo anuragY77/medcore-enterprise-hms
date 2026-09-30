@@ -338,6 +338,7 @@ export default function PatientRecordPage({ params }: { params: Promise<{ id: st
         <div className="flex items-center gap-4">
           <Link
             href="/patients"
+            aria-label="Back to patients"
             className="p-2 rounded-lg hover:bg-muted transition-colors"
           >
             <ArrowLeft className="h-5 w-5 text-muted-foreground" />

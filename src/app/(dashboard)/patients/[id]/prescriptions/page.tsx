@@ -28,14 +28,14 @@ export default function PrescriptionsPage() {
           Manage patient prescriptions and medication orders
         </p>
       </div>
-      <div className="mb-4 flex gap-2">
+      <div className="mb-4 flex flex-wrap gap-2">
         {["All", "Active", "Completed", "Discontinued"].map((status) => (
           <button
             key={status}
             onClick={() => setStatusFilter(status)}
             className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
               statusFilter === status
-                ? "bg-emerald-600 text-white"
+                ? "bg-primary text-primary-foreground"
                 : "bg-slate-100 text-slate-600 hover:bg-slate-200"
             }`}
           >

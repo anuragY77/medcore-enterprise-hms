@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { cloneElement, isValidElement, useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -49,13 +49,19 @@ function FormField({
   required?: boolean;
   className?: string;
 }) {
+  const id = useId();
   return (
     <div className={className}>
-      <label className="block text-sm font-medium text-foreground mb-1.5">
+      <label
+        htmlFor={id}
+        className="block text-sm font-medium text-foreground mb-1.5"
+      >
         {label}
         {required && <span className="text-destructive ml-0.5">*</span>}
       </label>
-      {children}
+      {isValidElement(children)
+        ? cloneElement(children as React.ReactElement<{ id?: string }>, { id })
+        : children}
       {error && <p className="text-xs text-destructive mt-1">{error}</p>}
     </div>
   );

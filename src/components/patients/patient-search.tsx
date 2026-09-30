@@ -61,7 +61,7 @@ export function PatientStatusFilter({
             "px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
             value === status
               ? "bg-primary text-primary-foreground"
-              : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
+              : "bg-muted/50 text-slate-600 hover:bg-muted hover:text-foreground"
           )}
         >
           {status}

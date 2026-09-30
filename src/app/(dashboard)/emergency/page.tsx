@@ -156,6 +156,7 @@ export default function EmergencyPage() {
             className="flex-1 min-w-[200px] px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
           <select
+            aria-label="Status"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             className="px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -168,6 +169,7 @@ export default function EmergencyPage() {
             <option value="Cancelled">Cancelled</option>
           </select>
           <select
+            aria-label="Triage level"
             value={triageFilter}
             onChange={(e) => setTriageFilter(e.target.value)}
             className="px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -184,6 +186,7 @@ export default function EmergencyPage() {
             Search
           </button>
           <button
+            aria-label="Refresh list"
             type="button"
             onClick={fetchCases}
             className="px-3 py-2 rounded-md border border-border/50 text-sm text-muted-foreground hover:bg-muted transition-colors"

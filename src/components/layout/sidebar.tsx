@@ -41,7 +41,7 @@ function SidebarGroup({ group }: { group: NavGroup }) {
 
   return (
     <div className="mb-4">
-      <p className="px-3 mb-2 text-[11px] font-medium uppercase tracking-wider text-white/40">
+      <p className="px-3 mb-2 text-[11px] font-medium uppercase tracking-wider text-white/60">
         {group.label}
       </p>
       <div className="space-y-0.5">
@@ -74,7 +74,7 @@ export function Sidebar({ className }: SidebarProps) {
           <Activity className="h-5 w-5" />
         </div>
         <div>
-          <h1 className="text-sm font-semibold text-white font-headline">MedCore</h1>
+          <div className="text-sm font-semibold text-white font-headline">MedCore</div>
           <p className="text-[10px] text-white/50">Premium HMS</p>
         </div>
       </div>
@@ -84,7 +84,7 @@ export function Sidebar({ className }: SidebarProps) {
         ))}
       </nav>
       <div className="px-4 py-3 border-t border-white/10">
-        <p className="text-[10px] text-white/30">MedCore Premium v1.0</p>
+        <p className="text-[10px] text-white/50">MedCore Premium v1.0</p>
       </div>
     </aside>
   );

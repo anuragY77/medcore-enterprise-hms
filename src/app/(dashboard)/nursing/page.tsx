@@ -173,6 +173,7 @@ export default function NursingPage() {
           </p>
         </div>
         <button
+          aria-label="Refresh list"
           onClick={handleRefresh}
           className="px-3 py-2 rounded-md border border-border/50 text-sm text-muted-foreground hover:bg-muted transition-colors"
         >
@@ -204,6 +205,7 @@ export default function NursingPage() {
             className="w-40 px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
           <select
+            aria-label="Status"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             className="px-3 py-2 rounded-md border border-border/50 bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
