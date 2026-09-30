@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { RefreshCw } from "lucide-react";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
+import { NOTIFICATIONS_CHANGED_EVENT } from "@/components/layout/notification-bell";
 import { Button } from "@/components/ui/button";
 import {
   NotificationFilters,
@@ -175,6 +176,7 @@ export default function NotificationsPage() {
             : n
         )
       );
+      window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED_EVENT));
     } catch (err) {
       setActionError({
         id,
