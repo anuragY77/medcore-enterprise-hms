@@ -1,6 +1,7 @@
 "use client";
 
 import { Search, Menu, LogOut } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -12,6 +13,7 @@ interface TopbarProps {
 }
 
 export function Topbar({ onMenuClick }: TopbarProps) {
+  const router = useRouter();
   const { data: session } = useSession();
   const user = session?.user;
 
@@ -38,14 +40,28 @@ export function Topbar({ onMenuClick }: TopbarProps) {
       </Button>
 
       <div className="flex-1 max-w-md">
-        <div className="relative">
+        <form
+          className="relative"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const raw = new FormData(e.currentTarget).get("q");
+            const value = typeof raw === "string" ? raw.trim() : "";
+            router.push(
+              value
+                ? `/patients?search=${encodeURIComponent(value)}`
+                : "/patients"
+            );
+          }}
+        >
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
             type="search"
-            placeholder="Search patients, records..."
+            name="q"
+            aria-label="Search patients"
+            placeholder="Search patients..."
             className="w-full h-9 pl-9 pr-4 rounded-full bg-muted border-0 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/20"
           />
-        </div>
+        </form>
       </div>
 
       <div className="flex items-center gap-2 ml-auto">

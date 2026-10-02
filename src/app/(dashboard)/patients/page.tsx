@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Plus, RefreshCw, Users } from "lucide-react";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
@@ -17,6 +17,12 @@ const EMPTY_META: PatientsMeta = { page: 1, pageSize: 10, total: 0, totalPages: 
 const SEARCH_DEBOUNCE_MS = 300;
 
 export default function PatientsPage() {
+  const searchParams = useSearchParams();
+  const search = searchParams.get("search")?.trim() ?? "";
+  return <PatientsView key={search} search={search} />;
+}
+
+function PatientsView({ search }: { search: string }) {
   const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
 
@@ -25,8 +31,8 @@ export default function PatientsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [searchInput, setSearchInput] = useState("");
-  const [query, setQuery] = useState("");
+  const [searchInput, setSearchInput] = useState(search);
+  const [query, setQuery] = useState(search);
   const [statusFilter, setStatusFilter] = useState("All");
   const [page, setPage] = useState(1);
 
