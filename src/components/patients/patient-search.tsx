@@ -29,6 +29,7 @@ export function PatientSearch({
       {value && (
         <button
           onClick={() => onChange("")}
+          aria-label="Clear search"
           className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-muted transition-colors"
         >
           <X className="h-3.5 w-3.5 text-muted-foreground" />
