@@ -39,7 +39,7 @@ Most portfolio HMS projects stop at CRUD screens with fake data. MedCore goes fu
 - **🔒 Real security** — every API is authenticated and permission-checked server-side; UI gating is a convenience, the backend is the source of truth.
 - **🔁 Real workflows** — admit → assign bed → occupy → transfer → discharge → release, with transactional integrity, deadlock-safe locking, and audit trails.
 - **🧾 Real billing** — invoices, payments, insurance claims, approvals — computed from actual line items, never hard-coded.
-- **🧪 Really tested** — 1,549 automated checks across 17 suites (API contracts, RBAC matrices, DB integrity, concurrency races, notification delivery, static source gates), plus strict `tsc`, ESLint, and production build gates.
+- **🧪 Really tested** — 1,549 automated checks across 17 regression suites (API contracts, RBAC matrices, DB integrity, concurrency races, notification delivery, static source gates), plus strict `tsc`, ESLint, and production build gates. The suites run from a local harness outside this repository; the committed gates are `tsc`, lint, and build.
 - **🚫 Zero fake data in the UI** — dashboards, ward views, and shift summaries are computed from live queries.
 
 ---
@@ -244,8 +244,8 @@ src/
 │   │   ├── beds/               #    inpatient lifecycle UI
 │   │   ├── nursing/            #    nurse station
 │   │   └── billing|insurance/  #    revenue cycle
-│   └── api/                    # ⚡ 51 route handlers (RBAC + validation)
-├── components/                 # 🧩 77 reusable components
+│   └── api/                    # ⚡ 52 route handlers (RBAC + validation)
+├── components/                 # 🧩 79 reusable components
 ├── lib/
 │   ├── auth.ts                 #    NextAuth + session
 │   ├── audit.ts                #    append-only audit writer
@@ -289,7 +289,7 @@ Private — All rights reserved.
 
 <div align="center">
 
-**Built with obsessive attention to correctness — every claim in this README is enforced by a test.**
+**Built with obsessive attention to correctness — every claim in this README is backed by automated checks or verified source.**
 
 `★ Star the repo if you find it impressive` · [Report an issue](https://github.com/anuragY77/medcore-enterprise-hms/issues)
 
