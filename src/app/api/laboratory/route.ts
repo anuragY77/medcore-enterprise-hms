@@ -7,6 +7,7 @@ import { db, labTests, patients, consultations } from "@/lib/db";
 import { paginationSchema } from "@/lib/validations/common";
 import { labTestSchema } from "@/lib/validations/laboratory";
 import { recordAudit } from "@/lib/audit";
+import { nextBusinessId } from "@/lib/business-id";
 
 export async function GET(request: NextRequest) {
   try {
@@ -188,12 +189,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const testCount = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(labTests);
-
-    const nextNumber = Number(testCount[0]?.count ?? 0) + 1;
-    const testId = `LAB-${String(nextNumber).padStart(3, "0")}`;
+    const testId = await nextBusinessId(db, "LAB");
 
     const [newTest] = await db
       .insert(labTests)

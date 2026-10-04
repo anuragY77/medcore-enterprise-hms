@@ -8,6 +8,7 @@ import { paginationSchema } from "@/lib/validations/common";
 import { insuranceClaimSchema } from "@/lib/validations/insurance";
 import { isUniqueViolation } from "@/lib/billing";
 import { recordAudit } from "@/lib/audit";
+import { nextBusinessId } from "@/lib/business-id";
 import { resolveUsersByRole, recordNotifications } from "@/lib/notifications";
 
 const ACTIVE_CLAIM_STATUSES = ["Submitted", "Processing", "Approved"];
@@ -238,12 +239,7 @@ export async function POST(request: NextRequest) {
             }
           }
 
-          const claimCount = await tx
-            .select({ count: sql<number>`count(*)` })
-            .from(insuranceClaims);
-
-          const nextNumber = Number(claimCount[0]?.count ?? 0) + 1;
-          const claimId = `CLM-${String(nextNumber).padStart(3, "0")}`;
+          const claimId = await nextBusinessId(tx, "CLM");
 
           const [newClaim] = await tx
             .insert(insuranceClaims)

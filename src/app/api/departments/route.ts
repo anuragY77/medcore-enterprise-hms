@@ -3,6 +3,7 @@ import { and, eq, or, ilike, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
 import { db, departments } from "@/lib/db";
+import { nextBusinessId } from "@/lib/business-id";
 import { paginationSchema } from "@/lib/validations/common";
 import { departmentSchema } from "@/lib/validations/department";
 
@@ -103,12 +104,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const departmentCount = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(departments);
-
-    const nextNumber = Number(departmentCount[0]?.count ?? 0) + 1;
-    const departmentId = `DEPT-${String(nextNumber).padStart(3, "0")}`;
+    const departmentId = await nextBusinessId(db, "DEPT");
 
     const [newDepartment] = await db
       .insert(departments)

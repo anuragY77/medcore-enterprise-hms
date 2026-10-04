@@ -84,6 +84,7 @@ export function Sidebar({ className }: SidebarProps) {
         ))}
       </nav>
       <div className="px-4 py-3 border-t border-white/10">
+        <p className="text-[10px] text-white/60">Owner: Anurag Yadav</p>
         <p className="text-[10px] text-white/50">MedCore Premium v1.0</p>
       </div>
     </aside>

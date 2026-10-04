@@ -8,6 +8,7 @@ import { paginationSchema } from "@/lib/validations/common";
 import { invoiceSchema } from "@/lib/validations/billing";
 import { computeInvoiceTotal, isUniqueViolation } from "@/lib/billing";
 import { recordAudit } from "@/lib/audit";
+import { nextBusinessId } from "@/lib/business-id";
 import { resolveUsersByRole, recordNotifications } from "@/lib/notifications";
 
 export async function GET(request: NextRequest) {
@@ -192,12 +193,7 @@ export async function POST(request: NextRequest) {
     let newInvoice: (typeof invoices.$inferSelect) | undefined;
 
     for (let attempt = 0; attempt < 5 && !newInvoice; attempt++) {
-      const invoiceCount = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(invoices);
-
-      const nextNumber = Number(invoiceCount[0]?.count ?? 0) + 1;
-      const invoiceId = `INV-${String(nextNumber).padStart(3, "0")}`;
+      const invoiceId = await nextBusinessId(db, "INV");
 
       try {
         [newInvoice] = await db

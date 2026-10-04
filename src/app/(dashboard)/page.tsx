@@ -205,7 +205,9 @@ export default function DashboardPage() {
               <DepartmentUtilizationChart data={utilizationData} />
               <div className="space-y-4">
                 <ActivityTimeline events={stats.activity} />
-                <BillingSummary financial={stats.financial} />
+                {stats.financial && (
+                  <BillingSummary financial={stats.financial} />
+                )}
                 <QuickActions />
               </div>
             </div>

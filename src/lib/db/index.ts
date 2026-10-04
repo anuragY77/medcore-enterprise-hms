@@ -1,4 +1,5 @@
 import { drizzle } from "drizzle-orm/node-postgres";
+import * as schema from "./schema";
 import {
   users,
   patients,
@@ -22,9 +23,14 @@ import {
   surgeries,
   auditLogs,
   notifications,
+  loginRateLimits,
+  businessIdCounters,
 } from "./schema";
 
-const db = drizzle(process.env.DATABASE_URL!);
+// Passing `schema` keeps the app handle's transaction type identical to the
+// seed CLI's (`drizzle(url, { schema })`), so shared libraries can accept
+// either handle without casts. Runtime behavior is unchanged.
+const db = drizzle(process.env.DATABASE_URL!, { schema });
 
 export {
   db,
@@ -50,4 +56,6 @@ export {
   surgeries,
   auditLogs,
   notifications,
+  loginRateLimits,
+  businessIdCounters,
 };

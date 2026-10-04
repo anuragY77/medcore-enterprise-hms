@@ -78,6 +78,13 @@
       "when": 1790436947539,
       "tag": "0010_square_silvermane",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791133278223,
+      "tag": "0011_superb_boomer",
+      "breakpoints": true
     }
   ]
 }

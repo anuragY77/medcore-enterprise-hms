@@ -7,6 +7,7 @@ import { db, appointments } from "@/lib/db";
 import { paginationSchema } from "@/lib/validations/common";
 import { appointmentSchema } from "@/lib/validations/appointment";
 import { recordAudit } from "@/lib/audit";
+import { nextBusinessId } from "@/lib/business-id";
 import { resolveUserByName, recordNotifications } from "@/lib/notifications";
 
 export async function GET(request: NextRequest) {
@@ -143,12 +144,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const appointmentCount = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(appointments);
-
-    const nextNumber = Number(appointmentCount[0]?.count ?? 0) + 1;
-    const appointmentId = `APT-${String(nextNumber).padStart(3, "0")}`;
+    const appointmentId = await nextBusinessId(db, "APT");
 
     const [newAppointment] = await db
       .insert(appointments)

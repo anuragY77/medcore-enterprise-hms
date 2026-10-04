@@ -3,6 +3,7 @@ import { and, eq, or, ilike, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
 import { db, pharmacyMedicines } from "@/lib/db";
+import { nextBusinessId } from "@/lib/business-id";
 import { paginationSchema } from "@/lib/validations/common";
 import { pharmacyMedicineSchema } from "@/lib/validations/pharmacy";
 
@@ -110,12 +111,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const medicineCount = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(pharmacyMedicines);
-
-    const nextNumber = Number(medicineCount[0]?.count ?? 0) + 1;
-    const medicineId = `MED-${String(nextNumber).padStart(3, "0")}`;
+    const medicineId = await nextBusinessId(db, "MED");
 
     const [newMedicine] = await db
       .insert(pharmacyMedicines)
