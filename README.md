@@ -39,7 +39,7 @@ Most portfolio HMS projects stop at CRUD screens with fake data. MedCore goes fu
 - **🔒 Real security** — every API is authenticated and permission-checked server-side; UI gating is a convenience, the backend is the source of truth.
 - **🔁 Real workflows** — admit → assign bed → occupy → transfer → discharge → release, with transactional integrity, deadlock-safe locking, and audit trails.
 - **🧾 Real billing** — invoices, payments, insurance claims, approvals — computed from actual line items, never hard-coded.
-- **🧪 Really tested** — 1,549 automated checks across 17 regression suites (API contracts, RBAC matrices, DB integrity, concurrency races, notification delivery, static source gates), plus strict `tsc`, ESLint, and production build gates. The suites run from a local harness outside this repository; the committed gates are `tsc`, lint, and build.
+- **🧪 Really tested** — 1,549 automated checks across 17 regression suites (API contracts, RBAC matrices, DB integrity, concurrency races, notification delivery, static source gates), plus strict `tsc`, ESLint, and production build gates. The suites run from a local harness outside this repository; the committed gates are `tsc`, lint, the committed Vitest test suite, and build — the same four gates wired into CI for every push and pull request.
 - **🚫 Zero fake data in the UI** — dashboards, ward views, and shift summaries are computed from live queries.
 
 ---
@@ -173,13 +173,27 @@ Failed guards return before any write — no audit rows, no notifications, no pa
 
 ---
 
+## 🔒 Security & Hardening
+
+- **Brute-force login protection** — every credentials sign-in attempt passes through a PostgreSQL-backed rate limiter (`src/lib/login-rate-limit.ts`) before NextAuth runs. Repeated failures within a rolling window temporarily throttle the attempt (keyed by client + account, with a separate source-only key when the account field is unreadable or too long to store safely); a successful sign-in clears the keys, and blocks are always temporary — never permanent — so a legitimate user can never be locked out for long. Exact thresholds are internal policy and deliberately undocumented. If the limiter's own database access fails it **fails open** (login proceeds, error logged — genuine outages and possible defects are logged distinctly, so a bug cannot hide behind "the database was down"), because a database outage must never keep clinicians out of the hospital system. Responses stay generic — the UI never reveals whether an account exists. **Client-address trust**: the source IP is taken from the *last* `x-forwarded-for` entry — the one appended by the nearest proxy; a client-supplied prefix to its left is ignored — so deploy behind a reverse proxy that **overwrites** `x-forwarded-for`. On a directly exposed server that header is client-controlled and IP keying degrades accordingly; header tokens are validated as literal IPv4/IPv6 addresses, so a garbage header can only ever produce the shared `unknown` key, never an unbounded one.
+- **Explicit session lifetime** — sessions are JWTs with a **12-hour absolute lifetime** (`src/lib/session-config.ts`), enforced at every session read: the sign-in timestamp (`authAt` claim) is pinned once and never extended, so ordinary activity — including repeated `/api/auth/session` refreshes from the polling UI — cannot slide expiry; tokens past the limit are rejected and the cookie cleared (tokens minted before the claim existed adopt their own `iat`). Auth redirects are pinned to the configured `AUTH_URL` origin rather than a request-supplied Host, which doubles as a Host-header redirect-poisoning defense — set `AUTH_URL` to the deployment's real public origin. An inactivity-based idle timeout is intentionally deferred: it needs real server-side activity tracking, and a client-side redirect would not be a security control.
+- **Dashboard data scoping** — `GET /api/dashboard/stats` returns invoice totals only to roles holding `billing:read` (ADMIN, RECEPTIONIST, BILLING; others get `null` and the Billing Summary card is hidden) and the audit-derived activity feed only to roles holding `audit:read` (ADMIN, SECURITY; others get an empty timeline). All other blocks are non-identifying operational counts shared by every signed-in role.
+- **Collision-safe business identifiers** — appointment/staff/patient/… identifiers (`APT-151`, `STF-004`, `PT-10482`) are allocated from atomic, monotonic PostgreSQL counters (`src/lib/business-id.ts`) instead of `count(*) + 1`, so concurrent creates can never share an ID and a deleted row's number is never reissued; the per-column UNIQUE constraint remains the final integrity boundary. Seeding re-syncs counters idempotently to the highest number present per table.
+- **Dependency posture** — `next` is pinned to **16.3.8** (patches GHSA-vcvr-r3jv-pc5j, the `next/og` ImageResponse RCE; no `next/og` usage exists in this codebase, but the installed version is patched). Remaining `npm audit` findings are **development-only** transitive chains (drizzle-kit/esbuild, eslint-config-next tooling) with no production impact; npm's suggested fixes are semver-major downgrades and were rejected deliberately rather than applied blindly.
+- **Schema** — migration `0011` adds only two tables (`login_rate_limits`, `business_id_counters`); rollback is `DROP` of those tables. No existing columns changed.
+
+---
+
 ## ✅ Quality Gates
 
 | Gate | Result |
 |------|--------|
 | `npx tsc --noEmit` | ✅ Pass — strict TypeScript, zero errors |
 | `npm run lint` | ✅ Pass — 0 errors |
+| `npm test` | ✅ Pass — 168 checks total: 138 run without a test database (unit + gate, 30 integration skipped); all 168 with `TEST_DATABASE_URL` set |
+| `npm run test:coverage` | ✅ Pass — 79% statements / 79% branches over `src/lib` + `src/types` (session config 100%, rate limiter 94%, seed 95%) |
 | `npm run build` | ✅ Pass — production build |
+| **CI (GitHub Actions)** | ⏳ Ready — `tsc` → lint → tests → build on push/PR to `main` (`.github/workflows/ci.yml`; first GitHub-hosted run pending the next push) |
 | **17 test suites** | ✅ **1,549 / 1,549 checks green** |
 | — API contract suites | auth, records, beds, pharmacy, lab, surgery, emergency, billing |
 | — Concurrency tests | 8 parallel bed races + 5 transfer races (same patient, same destination ×3, vs release, vs assign) → exactly-one-success, deterministic 409s |
@@ -191,6 +205,38 @@ Failed guards return before any write — no audit rows, no notifications, no pa
 | **Lighthouse (desktop + mobile)** | ✅ login 100/100/100/100 · dashboard 100/100/100/100 · patients 100/100/100/100 · mobile 96/100/100/100 — all categories > 90 |
 | **Error boundaries** | ✅ live-tested 9/9 — root + dashboard loading/error, global-error, friendly 404 |
 | **Schema discipline** | ✅ No migration without an approved gate |
+
+---
+
+## 🧪 Testing & CI
+
+MedCore ships with a committed **Vitest** suite under `tests/` — no other test framework.
+
+| Command | What it runs |
+|---------|--------------|
+| `npm test` | Full suite (fast — skips DB integration unless `TEST_DATABASE_URL` is set) |
+| `npm test -- tests/unit/rbac.test.ts` | A single file |
+| `npm run test:watch` | Watch mode |
+| `npm run test:coverage` | Coverage scoped to `src/lib` + `src/types` (v8 provider, HTML report in `coverage/`) |
+
+**Unit tests** (`tests/unit/`) exercise the real implementations — never copies — of the pure-function core: billing math & unique-violation detection, the RBAC role/permission matrix (`src/types/auth.ts`), every shared Zod validation schema (patient, appointment, invoice, pagination, clinical), prescription-to-medicine matching, the login rate-limiter's trust-boundary parsing (rightmost `x-forwarded-for`, IPv4/IPv6 validation, storage-safe key bounds), store-error classification, and guard/observer logic (with a fake store), business-ID formatting and registry invariants, dashboard visibility rules, and the absolute-session enforcement paths (sign-in stamp, legacy `iat` fallback, malformed claims, repeated-refresh non-extension, cookie clearing). The guarded suite also asserts matrix invariants (41 unique permission keys, `patients:delete` = ADMIN only) so a silent refactor of the permission table fails CI.
+
+**Integration tests** (`tests/integration/`) run against a throwaway PostgreSQL database and verify real schema behavior: migrations apply idempotently, duplicate keys raise `23505` (caught by `isUniqueViolation`), `medical_records` cascade on patient delete, transactions roll back cleanly, the rate-limit store counts/blocks/resets/fails open against real rows (including oversized-identifier sibling isolation and atomic concurrent increments), business-ID allocation bootstraps from existing data, never reuses deleted numbers, and stays unique under concurrency **across all 12 registered prefixes**, and the demo seed never writes the owner's identity into clinical records. Safety rules:
+
+- `TEST_DATABASE_URL` must be set **explicitly** — it is never derived from `DATABASE_URL`.
+- The target database name must end with `_test`, otherwise the suite refuses before any connection.
+- Test files run **sequentially** (`fileParallelism: false`) — they share one guarded `*_test` database and seed exact row counts, so files must never mutate it concurrently.
+- When unset, the integration tests **skip** (unit tests still run), so contributors without a test database are never blocked.
+
+```bash
+# integration tests create the *_test database automatically when missing
+# (the guard only allows database names ending in _test)
+TEST_DATABASE_URL="postgresql://user:pass@localhost:5432/medcore_test" npm test
+```
+
+**CI** — `.github/workflows/ci.yml` runs on every push and pull request to `main` with least-privilege permissions (`contents: read`): `npm ci` → `npx tsc --noEmit` → `npm run lint` → `npm test` (against a `postgres:16-alpine` service, `medcore_test`) → `npm run build`, on Node 22.
+
+**Honest scope** — this suite covers the lib/types layer and DB integrity, *not* API route handlers or React components (those remain covered by the external 1,549-check harness, which is not committed to this repository). All four gates pass locally; the workflow's first GitHub-hosted run happens on the next push after these files land.
 
 ---
 
@@ -210,23 +256,43 @@ cp .env.example .env.local   # add your PostgreSQL URL
 # 4. Migrate + seed
 npx drizzle-kit generate
 npx drizzle-kit migrate
-npx tsx src/lib/db/seed.ts
+npm run seed:demo      # guarded demo dataset (refuses production-like DBs)
 
-# 5. Launch
+# 5. Verify the quality gates
+npx tsc --noEmit
+npm run lint
+npm test          # DB integration tests run when TEST_DATABASE_URL is set
+
+# 6. Launch
 npm run dev
 ```
 
 Open **[http://localhost:3000](http://localhost:3000)** 🎉
 
+### 🌱 Demo Data
+
+`npm run seed:demo` loads a realistic, deterministic demo dataset in a single
+transaction: 80 patients (≈85 % Indian names, 12 international), 18 staff,
+94 beds, 150 appointments, 210 prescriptions, 110 invoices, 24 pharmacy
+medicines, ER cases, surgeries and more. The seed:
+
+- **requires explicit confirmation** (`--demo` flag or `SEED_DEMO_DATA=1`)
+  and **refuses** production-like database names, non-loopback hosts and
+  `NODE_ENV=production` — it fails closed before opening a connection;
+- **never deletes or truncates** existing data — only upserts (stable IDs +
+  natural keys, so re-running is idempotent and never duplicates rows);
+- runs everything in **one transaction** — a failure rolls the whole run back;
+- keeps the demo administrator branded as **Anurag Yadav** (`admin@medcore.com`).
+
 ### 🔑 Demo Credentials
 
-| Role | Email | Password |
-|------|-------|----------|
-| 🛡️ Admin | `admin@medcore.com` | `medcore123` |
-| 🩺 Doctor | `doctor@medcore.com` | `medcore123` |
-| 💗 Nurse | `nurse@medcore.com` | `medcore123` |
-| 🙋 Reception | `reception@medcore.com` | `medcore123` |
-| 💊 Pharmacy | `pharmacy@medcore.com` | `medcore123` |
+| Role | Name | Email | Password |
+|------|------|-------|----------|
+| 🛡️ Admin | Anurag Yadav | `admin@medcore.com` | `medcore123` |
+| 🩺 Doctor | Dr. James Wilson | `doctor@medcore.com` | `medcore123` |
+| 💗 Nurse | Nurse Emily Chen | `nurse@medcore.com` | `medcore123` |
+| 🙋 Reception | Maria Garcia | `reception@medcore.com` | `medcore123` |
+| 💊 Pharmacy | Pharm. David Kim | `pharmacy@medcore.com` | `medcore123` |
 
 > 💡 Log in as **admin** for the full experience, then switch roles to see RBAC in action — menus, buttons, and API responses all change.
 

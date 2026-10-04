@@ -7,6 +7,7 @@ import { db, surgeries } from "@/lib/db";
 import { paginationSchema } from "@/lib/validations/common";
 import { surgerySchema } from "@/lib/validations/surgery";
 import { recordAudit } from "@/lib/audit";
+import { nextBusinessId } from "@/lib/business-id";
 
 export async function GET(request: NextRequest) {
   try {
@@ -143,12 +144,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const surgeryCount = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(surgeries);
-
-    const nextNumber = Number(surgeryCount[0]?.count ?? 0) + 1;
-    const surgeryId = `SRG-${String(nextNumber).padStart(3, "0")}`;
+    const surgeryId = await nextBusinessId(db, "SRG");
 
     const [newSurgery] = await db
       .insert(surgeries)

@@ -1,93 +1,61 @@
+import { fileURLToPath } from "node:url";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { users } from "./schema";
-import { eq } from "drizzle-orm";
-import bcrypt from "bcryptjs";
+import * as schema from "@/lib/db/schema";
+import { loadLocalEnv } from "./seed/env";
+import { assertSeedTarget, SeedGuardError } from "./seed/guard";
+import { seedAll } from "./seed/index";
+import type { SeedCounts } from "./seed/types";
 
-const SEED_USERS = [
-  {
-    email: "admin@medcore.com",
-    name: "Dr. Sarah Patel",
-    role: "ADMIN",
-    department: "Administration",
-    avatar: "SP",
-  },
-  {
-    email: "doctor@medcore.com",
-    name: "Dr. James Wilson",
-    role: "DOCTOR",
-    department: "Cardiology",
-    avatar: "JW",
-  },
-  {
-    email: "nurse@medcore.com",
-    name: "Nurse Emily Chen",
-    role: "NURSE",
-    department: "Emergency",
-    avatar: "EC",
-  },
-  {
-    email: "reception@medcore.com",
-    name: "Maria Garcia",
-    role: "RECEPTIONIST",
-    department: "Front Desk",
-    avatar: "MG",
-  },
-  {
-    email: "pharmacy@medcore.com",
-    name: "Pharm. David Kim",
-    role: "PHARMACIST",
-    department: "Pharmacy",
-    avatar: "DK",
-  },
-];
+/**
+ * Demo-data seed CLI.
+ *
+ * Safety model (all enforced before any connection opens):
+ *   1. Explicit confirmation: the `--demo` flag or SEED_DEMO_DATA=1.
+ *   2. NODE_ENV must be development or test (never production).
+ *   3. The target must be a parseable postgres URL on loopback, with a
+ *      non-production-like database name (see seed/guard.ts).
+ * The run itself is one transaction: any failure rolls the whole seed back.
+ * Only upserts run — no DELETE, TRUNCATE or DDL.
+ */
+async function main(): Promise<void> {
+  const args = process.argv.slice(2);
+  const confirmed =
+    args.includes("--demo") || process.env.SEED_DEMO_DATA === "1";
 
-const DEFAULT_PASSWORD = "medcore123";
+  loadLocalEnv(fileURLToPath(new URL("../../../", import.meta.url)));
 
-async function seed() {
-  const db = drizzle(process.env.DATABASE_URL!);
-  const hashedPassword = await bcrypt.hash(DEFAULT_PASSWORD, 10);
+  const target = assertSeedTarget({
+    databaseUrl: process.env.DATABASE_URL,
+    nodeName: process.env.NODE_ENV,
+    confirmed,
+  });
 
-  console.log("Seeding users...");
+  console.log(
+    `Seeding demo data into "${target.database}" @ ${target.host} ` +
+      `(NODE_ENV=${process.env.NODE_ENV})`
+  );
 
-  for (const user of SEED_USERS) {
-    const existing = await db
-      .select()
-      .from(users)
-      .where(eq(users.email, user.email))
-      .limit(1);
+  const db = drizzle(process.env.DATABASE_URL!, { schema });
+  const counts: SeedCounts = await db.transaction((tx) => seedAll(tx));
 
-    if (existing.length > 0) {
-      await db
-        .update(users)
-        .set({
-          name: user.name,
-          role: user.role,
-          department: user.department,
-          avatar: user.avatar,
-          password: hashedPassword,
-          updatedAt: new Date(),
-        })
-        .where(eq(users.email, user.email));
-      console.log(`  Updated: ${user.email}`);
-    } else {
-      await db.insert(users).values({
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        department: user.department,
-        avatar: user.avatar,
-        password: hashedPassword,
-      });
-      console.log(`  Inserted: ${user.email}`);
-    }
+  console.log("\nSeeded (upserted) rows by domain:");
+  let total = 0;
+  for (const [domain, n] of Object.entries(counts)) {
+    total += n;
+    console.log(`  ${domain.padEnd(22)} ${n}`);
   }
-
-  const count = await db.select().from(users);
-  console.log(`\nSeeding complete. Total users: ${count.length}`);
-  process.exit(0);
+  console.log(`  ${"TOTAL".padEnd(22)} ${total}`);
+  console.log(
+    "\nDone. Re-running is safe: identifiers are stable, so repeat runs " +
+      "update the same rows instead of duplicating them."
+  );
 }
 
-seed().catch((err) => {
-  console.error("Seed failed:", err);
+main().catch((error: unknown) => {
+  if (error instanceof SeedGuardError) {
+    console.error(`Seed refused: ${error.message}`);
+  } else {
+    console.error("Seed failed and was rolled back:", error);
+  }
   process.exit(1);
 });

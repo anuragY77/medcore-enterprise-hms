@@ -29,7 +29,14 @@ export default function LoginPage() {
       });
 
       if (result?.error) {
-        setError("Invalid email or password. Please try again.");
+        // Generic messages only: never reveal whether the account exists.
+        if (result.error === "RateLimited" || result.status === 429) {
+          setError(
+            "Too many sign-in attempts. Please wait a few minutes and try again."
+          );
+        } else {
+          setError("Invalid email or password. Please try again.");
+        }
       } else {
         router.push(callbackUrl);
         router.refresh();
@@ -52,6 +59,9 @@ export default function LoginPage() {
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
           Hospital Management System
+        </p>
+        <p className="text-xs text-muted-foreground/80 mt-0.5">
+          Demo owner &amp; administrator: Anurag Yadav
         </p>
       </div>
 

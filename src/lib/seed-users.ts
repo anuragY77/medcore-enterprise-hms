@@ -19,10 +19,10 @@ const SEED_USERS: SeedUser[] = [
     id: "usr_001",
     email: "admin@medcore.com",
     password: "", // Will be hashed
-    name: "Dr. Sarah Patel",
+    name: "Anurag Yadav",
     role: "ADMIN",
     department: "Administration",
-    avatar: "SP",
+    avatar: "AY",
   },
   {
     id: "usr_002",

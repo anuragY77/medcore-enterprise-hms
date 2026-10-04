@@ -7,6 +7,7 @@ import { db, patients } from "@/lib/db";
 import { paginationSchema } from "@/lib/validations/common";
 import { patientDateOfBirthSchema } from "@/lib/validations/patient";
 import { recordAudit } from "@/lib/audit";
+import { nextBusinessId } from "@/lib/business-id";
 
 export async function GET(request: NextRequest) {
   try {
@@ -139,12 +140,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const patientCount = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(patients);
-
-    const nextNumber = Number(patientCount[0]?.count ?? 0) + 10482;
-    const patientId = `PT-${nextNumber}`;
+    const patientId = await nextBusinessId(db, "PT");
 
     const [newPatient] = await db
       .insert(patients)

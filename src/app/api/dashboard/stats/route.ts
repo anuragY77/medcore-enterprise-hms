@@ -13,6 +13,7 @@ import {
   auditLogs,
 } from "@/lib/db";
 import type { DashboardActivityEvent, DashboardStats } from "@/types/dashboard";
+import { dashboardVisibility } from "@/lib/dashboard-access";
 
 // Server-local day boundaries, the same half-open convention used by the
 // Reports API (start of local day inclusive, start of next day exclusive).
@@ -59,6 +60,11 @@ export async function GET() {
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    // RBAC on aggregated dashboard blocks (Phase 17): invoice totals require
+    // billing:read, the audit-derived activity feed requires audit:read. The
+    // remaining aggregates are non-identifying operational counts shared by
+    // every role (the dashboard is the landing page for all nine roles).
+    const visibility = dashboardVisibility(session.user.role);
 
     const now = new Date();
     const todayStart = startOfDay(now);
@@ -70,6 +76,12 @@ export async function GET() {
     const chartStart = new Date(
       Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 6)
     );
+    // Dates interpolated inside `sql` templates go through node-postgres'
+    // local-wall serializer, while column writes use drizzle's UTC-wall
+    // serializer. Serialize these explicitly so the comparison stays in the
+    // same frame as the stored data (see chartStart comment above).
+    const todayEndUtc = todayEnd.toISOString();
+    const monthStartUtc = monthStart.toISOString();
 
     const pendingAppointmentStatus = inArray(appointments.status, [
       "Scheduled",
@@ -90,7 +102,7 @@ export async function GET() {
       db
         .select({
           total: count(),
-          newThisMonth: sql<number>`count(*) filter (where ${patients.createdAt} >= ${monthStart})`,
+          newThisMonth: sql<number>`count(*) filter (where ${patients.createdAt} >= ${monthStartUtc})`,
           active: sql<number>`count(*) filter (where ${patients.status} <> 'Discharged')`,
           critical: sql<number>`count(*) filter (where ${patients.status} = 'Critical')`,
         })
@@ -107,8 +119,8 @@ export async function GET() {
         .orderBy(beds.department),
       db
         .select({
-          today: sql<number>`count(*) filter (where ${appointments.date} < ${todayEnd})`,
-          pendingToday: sql<number>`count(*) filter (where ${appointments.date} < ${todayEnd} and ${pendingAppointmentStatus})`,
+          today: sql<number>`count(*) filter (where ${appointments.date} < ${todayEndUtc})`,
+          pendingToday: sql<number>`count(*) filter (where ${appointments.date} < ${todayEndUtc} and ${pendingAppointmentStatus})`,
           upcomingPending: sql<number>`count(*) filter (where ${pendingAppointmentStatus})`,
         })
         .from(appointments)
@@ -139,12 +151,14 @@ export async function GET() {
         .from(staff)
         .where(eq(staff.status, "Active"))
         .groupBy(staff.department),
-      db
-        .select({
-          totalInvoiced: sql<string>`coalesce(sum(${invoices.totalAmount}), 0)`,
-          totalPaid: sql<string>`coalesce(sum(${invoices.paidAmount}), 0)`,
-        })
-        .from(invoices),
+      visibility.financial
+        ? db
+            .select({
+              totalInvoiced: sql<string>`coalesce(sum(${invoices.totalAmount}), 0)`,
+              totalPaid: sql<string>`coalesce(sum(${invoices.paidAmount}), 0)`,
+            })
+            .from(invoices)
+        : Promise.resolve(null),
       db
         .select({
           day: sql<string>`to_char(date(${medicalRecords.recordDate}), 'YYYY-MM-DD')`,
@@ -155,16 +169,18 @@ export async function GET() {
         .where(gte(medicalRecords.recordDate, chartStart))
         .groupBy(sql`date(${medicalRecords.recordDate})`)
         .orderBy(sql`date(${medicalRecords.recordDate})`),
-      db
-        .select({
-          id: auditLogs.id,
-          action: auditLogs.action,
-          severity: auditLogs.severity,
-          timestamp: auditLogs.timestamp,
-        })
-        .from(auditLogs)
-        .orderBy(desc(auditLogs.timestamp))
-        .limit(8),
+      visibility.activity
+        ? db
+            .select({
+              id: auditLogs.id,
+              action: auditLogs.action,
+              severity: auditLogs.severity,
+              timestamp: auditLogs.timestamp,
+            })
+            .from(auditLogs)
+            .orderBy(desc(auditLogs.timestamp))
+            .limit(8)
+        : Promise.resolve(null),
     ]);
 
     const bedsTotal = bedByDept.reduce((sum, row) => sum + toNumber(row.total), 0);
@@ -202,8 +218,8 @@ export async function GET() {
       };
     });
 
-    const totalInvoiced = toNumber(invoiceAgg[0]?.totalInvoiced);
-    const totalPaid = toNumber(invoiceAgg[0]?.totalPaid);
+    const totalInvoiced = toNumber(invoiceAgg?.[0]?.totalInvoiced);
+    const totalPaid = toNumber(invoiceAgg?.[0]?.totalPaid);
 
     const chartByDay = new Map(
       chartRows.map((row) => [row.day, row])
@@ -223,15 +239,17 @@ export async function GET() {
       });
     }
 
-    const activity: DashboardActivityEvent[] = activityRows.map((row) => ({
-      id: row.id,
-      description: describeAction(row.action),
-      timestamp: row.timestamp.toISOString(),
-      type:
-        row.severity && ALERT_SEVERITIES.includes(row.severity.toUpperCase())
-          ? "alert"
-          : "audit",
-    }));
+    const activity: DashboardActivityEvent[] = (activityRows ?? []).map(
+      (row) => ({
+        id: row.id,
+        description: describeAction(row.action),
+        timestamp: row.timestamp.toISOString(),
+        type:
+          row.severity && ALERT_SEVERITIES.includes(row.severity.toUpperCase())
+            ? "alert"
+            : "audit",
+      })
+    );
 
     const data: DashboardStats = {
       patients: {
@@ -258,11 +276,13 @@ export async function GET() {
         erVisitsToday: toNumber(erAgg[0]?.value),
       },
       departments,
-      financial: {
-        totalInvoiced: round2(totalInvoiced),
-        totalPaid: round2(totalPaid),
-        outstanding: round2(totalInvoiced - totalPaid),
-      },
+      financial: visibility.financial
+        ? {
+            totalInvoiced: round2(totalInvoiced),
+            totalPaid: round2(totalPaid),
+            outstanding: round2(totalInvoiced - totalPaid),
+          }
+        : null,
       admissionsChart,
       activity,
     };

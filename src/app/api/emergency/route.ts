@@ -7,6 +7,7 @@ import { db, emergencyCases } from "@/lib/db";
 import { paginationSchema } from "@/lib/validations/common";
 import { emergencyCaseSchema } from "@/lib/validations/emergency";
 import { recordAudit } from "@/lib/audit";
+import { nextBusinessId } from "@/lib/business-id";
 
 export async function GET(request: NextRequest) {
   try {
@@ -139,12 +140,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const caseCount = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(emergencyCases);
-
-    const nextNumber = Number(caseCount[0]?.count ?? 0) + 1;
-    const caseId = `EMC-${String(nextNumber).padStart(3, "0")}`;
+    const caseId = await nextBusinessId(db, "EMC");
 
     const [newCase] = await db
       .insert(emergencyCases)

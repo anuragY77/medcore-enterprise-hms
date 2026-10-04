@@ -56,7 +56,8 @@ export interface DashboardStats {
     erVisitsToday: number;
   };
   departments: DashboardDepartment[];
-  financial: DashboardFinancial;
+  /** Null when the signed-in role lacks billing:read (see dashboard-access). */
+  financial: DashboardFinancial | null;
   admissionsChart: DashboardChartDataPoint[];
   activity: DashboardActivityEvent[];
 }

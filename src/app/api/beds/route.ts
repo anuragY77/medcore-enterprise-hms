@@ -6,6 +6,7 @@ import { db, beds, patients } from "@/lib/db";
 import { paginationSchema } from "@/lib/validations/common";
 import { bedSchema } from "@/lib/validations/bed";
 import { recordAudit } from "@/lib/audit";
+import { nextBusinessId } from "@/lib/business-id";
 import { resolveUsersByDepartmentRole, recordNotifications } from "@/lib/notifications";
 
 const BED_SELECT = {
@@ -216,9 +217,7 @@ export async function POST(request: NextRequest) {
               return { kind: "error" as const, status: 409, error: "Patient already occupies a bed" };
             }
 
-            const bedCount = await tx.select({ count: sql<number>`count(*)` }).from(beds);
-            const nextNumber = Number(bedCount[0]?.count ?? 0) + 1 + attempt;
-            const bedId = `BED-${String(nextNumber).padStart(3, "0")}`;
+            const bedId = await nextBusinessId(tx, "BED");
 
             const [row] = await tx
               .insert(beds)
@@ -278,9 +277,7 @@ export async function POST(request: NextRequest) {
 
     let newBed = null;
     for (let attempt = 0; attempt < 5 && !newBed; attempt++) {
-      const bedCount = await db.select({ count: sql<number>`count(*)` }).from(beds);
-      const nextNumber = Number(bedCount[0]?.count ?? 0) + 1 + attempt;
-      const bedId = `BED-${String(nextNumber).padStart(3, "0")}`;
+      const bedId = await nextBusinessId(db, "BED");
       try {
         const [row] = await db
           .insert(beds)

@@ -6,6 +6,7 @@ import { db, staff } from "@/lib/db";
 import { paginationSchema } from "@/lib/validations/common";
 import { staffSchema } from "@/lib/validations/staff";
 import { recordAudit } from "@/lib/audit";
+import { nextBusinessId } from "@/lib/business-id";
 
 export async function GET(request: NextRequest) {
   try {
@@ -116,12 +117,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const staffCount = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(staff);
-
-    const nextNumber = Number(staffCount[0]?.count ?? 0) + 1;
-    const staffId = `STF-${String(nextNumber).padStart(3, "0")}`;
+    const staffId = await nextBusinessId(db, "STF");
 
     const [newStaff] = await db
       .insert(staff)

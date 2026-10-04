@@ -6,6 +6,7 @@ import type { Role } from "@/types/auth";
 import { ROLES } from "@/types/auth";
 import { db, users } from "./db";
 import { recordAudit } from "./audit";
+import { sessionConfig, enforceAbsoluteSession } from "./session-config";
 
 declare module "next-auth" {
   interface Session {
@@ -29,7 +30,9 @@ declare module "next-auth" {
 const VALID_ROLES = new Set<string>(Object.values(ROLES));
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  session: { strategy: "jwt" },
+  // Explicit absolute session lifetime (12h, non-sliding) — see
+  // src/lib/session-config.ts for the design rationale.
+  session: sessionConfig,
   pages: {
     signIn: "/login",
     error: "/login",
@@ -111,8 +114,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.role = user.role;
         token.department = user.department;
         token.avatar = user.avatar;
+        // Absolute session start pinned at sign-in (see session-config).
+        token.authAt = Math.floor(Date.now() / 1000);
       }
-      return token;
+      // Phase 18: Auth.js refreshes JWT exp/cookie on every session call, so
+      // the 12h absolute lifetime is enforced here — an expired token returns
+      // null, which drops the session and clears the cookie.
+      return enforceAbsoluteSession(token);
     },
     async session({ session, token }) {
       if (session.user) {

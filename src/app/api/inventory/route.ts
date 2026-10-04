@@ -3,6 +3,7 @@ import { and, eq, or, ilike, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
 import { db, inventoryItems } from "@/lib/db";
+import { nextBusinessId } from "@/lib/business-id";
 import { paginationSchema } from "@/lib/validations/common";
 import { inventoryItemSchema } from "@/lib/validations/inventory";
 
@@ -120,12 +121,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const itemCount = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(inventoryItems);
-
-    const nextNumber = Number(itemCount[0]?.count ?? 0) + 1;
-    const itemId = `ITM-${String(nextNumber).padStart(3, "0")}`;
+    const itemId = await nextBusinessId(db, "ITM");
 
     const [newItem] = await db
       .insert(inventoryItems)

@@ -348,3 +348,23 @@ export const notifications = pgTable("notifications", {
   createdAtIdx: index("notifications_created_at_idx").on(table.createdAt),
   recipientReadIdx: index("notifications_recipient_is_read_idx").on(table.recipientId, table.isRead, table.createdAt),
 }));
+
+// Server-side brute-force throttling for the credentials login flow. Rows are
+// short-lived (window/block durations are enforced in application code) and
+// opportunistically pruned, so the table stays bounded.
+export const loginRateLimits = pgTable("login_rate_limits", {
+  key: varchar("key", { length: 200 }).primaryKey(),
+  failCount: integer("fail_count").notNull().default(0),
+  windowStartedAt: timestamp("window_started_at").notNull(),
+  blockedUntil: timestamp("blocked_until"),
+}, (table) => ({
+  windowStartedAtIdx: index("login_rate_limits_window_idx").on(table.windowStartedAt),
+}));
+
+// Monotonic counters for human-visible business identifiers (APT-001, PT-10482…).
+// Allocation is a single atomic UPDATE so concurrent creates never share an ID,
+// and IDs are never reused after deletions.
+export const businessIdCounters = pgTable("business_id_counters", {
+  prefix: varchar("prefix", { length: 10 }).primaryKey(),
+  nextValue: integer("next_value").notNull(),
+});

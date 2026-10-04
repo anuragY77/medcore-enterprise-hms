@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: medcore_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # Build-time dummies only — never a production secret.
+      AUTH_SECRET: ci-build-only-dummy-secret
+      AUTH_URL: http://localhost:3000
+      # DATABASE_URL points at a database that is never created or queried;
+      # unit tests never connect and the build does not query the database.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/medcore_ci_unused
+      # Integration suite runs only against this *_test database.
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/medcore_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit + integration tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
