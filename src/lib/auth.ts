@@ -2,11 +2,20 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
+import type { NextAuthRequest, Session } from "next-auth";
 import type { Role } from "@/types/auth";
 import { ROLES } from "@/types/auth";
 import { db, users } from "./db";
 import { recordAudit } from "./audit";
-import { sessionConfig, enforceAbsoluteSession } from "./session-config";
+import {
+  SESSION_AUTH_AT_CLAIM,
+  SESSION_IDLE_TIMEOUT_SECONDS,
+  SESSION_SID_CLAIM,
+  sessionConfig,
+  enforceAbsoluteSession,
+} from "./session-config";
+import { enforceSessionLiveness } from "./session-liveness";
+import { logSessionActivityFailure, sweepStaleSessionActivity } from "./session-activity";
 
 declare module "next-auth" {
   interface Session {
@@ -18,6 +27,12 @@ declare module "next-auth" {
       department: string;
       avatar?: string;
     };
+    /** Phase 19: stable per-login session id (token `sid`) — keys activity state. */
+    sessionId?: string;
+    /** Phase 19: absolute sign-in time from the token (epoch seconds). */
+    authAt?: number;
+    /** Phase 19: effective idle window, surfaced for the client warning UX. */
+    idleTimeoutSeconds?: number;
   }
 
   interface User {
@@ -29,9 +44,11 @@ declare module "next-auth" {
 
 const VALID_ROLES = new Set<string>(Object.values(ROLES));
 
-export const { handlers, signIn, signOut, auth } = NextAuth({
+const nextAuthInstance = NextAuth({
   // Explicit absolute session lifetime (12h, non-sliding) — see
-  // src/lib/session-config.ts for the design rationale.
+  // src/lib/session-config.ts for the design rationale. The Phase 19 IDLE
+  // timeout is enforced at the `auth()` boundary below, not here, so the
+  // jwt/session callbacks stay free of database access.
   session: sessionConfig,
   pages: {
     signIn: "/login",
@@ -97,6 +114,16 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           metadata: null,
         });
 
+        // Phase 19: opportunistically prune idle-state rows older than the
+        // retention window (always longer than the absolute session
+        // lifetime, so a live row can never be pruned). Best-effort — a
+        // pruning failure must never block sign-in.
+        try {
+          await sweepStaleSessionActivity();
+        } catch (error) {
+          logSessionActivityFailure("sweep-on-login", error);
+        }
+
         return {
           id: user.id,
           email: user.email,
@@ -117,6 +144,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         // Absolute session start pinned at sign-in (see session-config).
         token.authAt = Math.floor(Date.now() / 1000);
       }
+      // Phase 19: stable per-login session id for the shared idle state.
+      // Auth.js's own `jti` is re-minted by encode() on every session
+      // re-encode, so it changes on every poll — `sid` is stamped once and
+      // persists for the life of this login. Stamping is pure (no I/O).
+      if (!token[SESSION_SID_CLAIM]) {
+        token[SESSION_SID_CLAIM] = globalThis.crypto.randomUUID();
+      }
       // Phase 18: Auth.js refreshes JWT exp/cookie on every session call, so
       // the 12h absolute lifetime is enforced here — an expired token returns
       // null, which drops the session and clears the cookie.
@@ -129,7 +163,46 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         session.user.department = token.department as string;
         session.user.avatar = token.avatar as string | undefined;
       }
+      // Phase 19: internal fields consumed by the server-side liveness gate
+      // (sid keys activity state, authAt seeds a missing row) and by the
+      // client idle-warning UX (idleTimeoutSeconds is config, not state).
+      session.sessionId = token[SESSION_SID_CLAIM] as string | undefined;
+      session.authAt =
+        typeof token[SESSION_AUTH_AT_CLAIM] === "number"
+          ? token[SESSION_AUTH_AT_CLAIM]
+          : undefined;
+      session.idleTimeoutSeconds = SESSION_IDLE_TIMEOUT_SECONDS;
       return session;
     },
   },
 });
+
+export const { handlers, signIn, signOut } = nextAuthInstance;
+
+type MiddlewareCallback = (
+  req: NextAuthRequest
+) => Response | void | Promise<Response | void>;
+
+/**
+ * Phase 19: the single enforcement boundary for session LIVENESS.
+ *
+ * Both call forms are preserved (87 data-path routes call `auth()`;
+ * src/proxy.ts uses the middleware form) and both run
+ * `enforceSessionLiveness` — idle window, user existence, and role
+ * freshness — on top of Auth.js's pure JWT decoding. Keeping the check out
+ * of the jwt callback itself preserves Phase 18's database-free lifetime
+ * tests and gives one testable decision point (tests/unit/session-liveness).
+ */
+export function auth(): Promise<Session | null>;
+export function auth(callback: MiddlewareCallback): unknown;
+export function auth(callback?: MiddlewareCallback): unknown {
+  if (typeof callback === "function") {
+    return nextAuthInstance.auth(async (req: NextAuthRequest) => {
+      req.auth = await enforceSessionLiveness(req.auth);
+      return callback(req);
+    });
+  }
+  return nextAuthInstance
+    .auth()
+    .then((session) => enforceSessionLiveness(session));
+}

@@ -25,6 +25,7 @@ import {
   notifications,
   loginRateLimits,
   businessIdCounters,
+  sessionActivity,
 } from "./schema";
 
 // Passing `schema` keeps the app handle's transaction type identical to the
@@ -58,4 +59,5 @@ export {
   notifications,
   loginRateLimits,
   businessIdCounters,
+  sessionActivity,
 };
