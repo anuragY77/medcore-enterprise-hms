@@ -200,7 +200,7 @@ MedCore is a **fully working demonstration system** — real authentication, RBA
 | `npm test` | ✅ Pass — 243 checks total: 193 run without a test database (unit + gate, 50 integration skipped); all 243 with `TEST_DATABASE_URL` set |
 | `npm run test:coverage` | ✅ Pass — 80.3% statements / 81.7% branches over `src/lib` + `src/types` (session config & session-activity 100%, session liveness 96%, rate limiter 94%, seed 95%) |
 | `npm run build` | ✅ Pass — production build |
-| **CI (GitHub Actions)** | ⏳ Ready — `tsc` → lint → tests → build on push/PR to `main` (`.github/workflows/ci.yml`; first GitHub-hosted run pending the next push) |
+| **CI (GitHub Actions)** | ✅ GitHub-hosted PASS (run `37353028188`) — `next typegen` → `tsc` → lint → tests → build on push/PR to `main` (`.github/workflows/ci.yml`) |
 | **17 test suites** | ✅ **1,549 / 1,549 checks green** |
 | — API contract suites | auth, records, beds, pharmacy, lab, surgery, emergency, billing |
 | — Concurrency tests | 8 parallel bed races + 5 transfer races (same patient, same destination ×3, vs release, vs assign) → exactly-one-success, deterministic 409s |
@@ -241,9 +241,9 @@ MedCore ships with a committed **Vitest** suite under `tests/` — no other test
 TEST_DATABASE_URL="postgresql://user:pass@localhost:5432/medcore_test" npm test
 ```
 
-**CI** — `.github/workflows/ci.yml` runs on every push and pull request to `main` with least-privilege permissions (`contents: read`): `npm ci` → `npx tsc --noEmit` → `npm run lint` → `npm test` (against a `postgres:16-alpine` service, `medcore_test`) → `npm run build`, on Node 22.
+**CI** — `.github/workflows/ci.yml` runs on every push and pull request to `main` with least-privilege permissions (`contents: read`): `npm ci` → `npx next typegen` (generates the `.next/types` route types that `LayoutProps<"/">` depends on; absent in a fresh checkout) → `npx tsc --noEmit` → `npm run lint` → `npm test` (against a `postgres:16-alpine` service, `medcore_test`) → `npm run build`, on Node 22.
 
-**Honest scope** — this suite covers the lib/types layer and DB integrity, *not* API route handlers or React components (those remain covered by the external 1,549-check harness, which is not committed to this repository). All four gates pass locally; the workflow's first GitHub-hosted run happens on the next push after these files land.
+**Honest scope** — this suite covers the lib/types layer and DB integrity, *not* API route handlers or React components (those remain covered by the external 1,549-check harness, which is not committed to this repository). All four gates pass locally, and the GitHub-hosted workflow passes on `main` (run `37353028188`; the first run failed because `tsc` ran before Next's route-type codegen, fixed in `396e6d9`).
 
 ---
 
