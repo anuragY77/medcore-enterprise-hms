@@ -49,6 +49,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Next.js 16 typed routes (LayoutProps etc.) live in generated
+      # .next/types files that do not exist in a fresh checkout; tsc runs
+      # before any build/dev, so generate them first (no full build needed).
+      - name: Generate Next.js route types
+        run: npx next typegen
+
       - name: Typecheck
         run: npx tsc --noEmit
 
