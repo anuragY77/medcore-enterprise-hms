@@ -368,3 +368,25 @@ export const businessIdCounters = pgTable("business_id_counters", {
   prefix: varchar("prefix", { length: 10 }).primaryKey(),
   nextValue: integer("next_value").notNull(),
 });
+
+// Phase 19: shared per-session activity state for the server-side idle
+// timeout. One row per login (sid = stable token claim, NOT Auth.js's
+// per-encode jti), so multiple app instances enforce the same idle clock.
+// All idle comparisons run in PostgreSQL against `last_activity` (never in
+// JavaScript), which sidesteps the naive-timestamp timezone skew found in
+// Phase 18. Rows are pruned opportunistically on login; retention exceeds
+// the absolute session lifetime so pruning cannot touch a live session.
+export const sessionActivity = pgTable("session_activity", {
+  sid: varchar("sid", { length: 64 }).primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, {
+    onDelete: "cascade",
+  }),
+  lastActivity: timestamp("last_activity").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  // One-shot flag so an idle expiry is audited exactly once per session
+  // instead of on every subsequent request from an abandoned tab.
+  expiredLogged: boolean("expired_logged").notNull().default(false),
+}, (table) => ({
+  lastActivityIdx: index("session_activity_last_activity_idx").on(table.lastActivity),
+  userIdIdx: index("session_activity_user_id_idx").on(table.userId),
+}));

@@ -5,6 +5,7 @@ import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Activity, Mail, Lock, Eye, EyeOff, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { sanitizeCallbackUrl } from "@/lib/safe-redirect";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -14,7 +15,19 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/";
+  // Phase 20: sanitize before post-login navigation — the raw query value
+  // can be attacker-supplied, and router.push() hard-navigates external or
+  // javascript: URLs (see src/lib/safe-redirect.ts).
+  const callbackUrl = sanitizeCallbackUrl(searchParams.get("callbackUrl"));
+  const errorParam = searchParams.get("error");
+  // Phase 19: middleware/route guards redirect here with error=SessionExpired
+  // when the server ended the session (idle or absolute expiry). Generic
+  // wording only — no reason beyond "it ended", nothing sensitive.
+  const expiredMessage =
+    errorParam === "SessionExpired"
+      ? "Your session has ended. Please sign in again."
+      : "";
+  const shownError = error || expiredMessage;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -73,10 +86,10 @@ export default function LoginPage() {
           Enter your credentials to access your account
         </p>
 
-        {error && (
+        {shownError && (
           <div className="flex items-center gap-2 p-3 mb-4 rounded bg-destructive/10 text-destructive text-sm">
             <AlertCircle className="h-4 w-4 shrink-0" />
-            <span>{error}</span>
+            <span>{shownError}</span>
           </div>
         )}
 
