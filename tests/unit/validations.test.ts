@@ -232,6 +232,15 @@ describe("paginationSchema", () => {
     expect(schema.safeParse({ page: "abc" }).success).toBe(false);
     expect(schema.safeParse({ pageSize: 0 }).success).toBe(false);
   });
+
+  it("enforces the Phase 21 upper bounds (bounded offset/limit scans)", () => {
+    // pageSize > 100 would let one query materialize huge slices of a table.
+    expect(schema.safeParse({ pageSize: 101 }).success).toBe(false);
+    expect(schema.safeParse({ pageSize: 100 }).success).toBe(true);
+    // Absurd page numbers translate into enormous OFFSET scans.
+    expect(schema.safeParse({ page: 100001 }).success).toBe(false);
+    expect(schema.safeParse({ page: 100000 }).success).toBe(true);
+  });
 });
 
 describe("idParamSchema", () => {

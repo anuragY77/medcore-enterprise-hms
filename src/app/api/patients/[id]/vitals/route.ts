@@ -5,6 +5,7 @@ import { hasPermission } from "@/types/auth";
 import { db, vitals, patients } from "@/lib/db";
 import { paginationSchema, idParamSchema } from "@/lib/validations/common";
 import { vitalSchema } from "@/lib/validations/clinical";
+import { recordAudit } from "@/lib/audit";
 
 export async function GET(
   request: NextRequest,
@@ -150,10 +151,26 @@ export async function POST(
         oxygenSaturation: parsed.data.oxygenSaturation ?? null,
         weight: parsed.data.weight ?? null,
         height: parsed.data.height ?? null,
-        recordedBy: parsed.data.recordedBy,
+        // Phase 21: attribution is server-authoritative — stored as the
+        // authenticated user, not the client-supplied name.
+        recordedBy: session.user.name,
         recordedAt: parsed.data.recordedAt ? new Date(parsed.data.recordedAt) : new Date(),
       })
       .returning();
+
+    await recordAudit({
+      actorId: session.user.id,
+      action: "vital.create",
+      entityType: "vital",
+      entityId: newVital.id,
+      severity: "INFO",
+      category: "patients",
+      success: true,
+      metadata: {
+        patientId: newVital.patientId,
+        recordedAt: newVital.recordedAt,
+      },
+    });
 
     return NextResponse.json(newVital, { status: 201 });
   } catch (error) {

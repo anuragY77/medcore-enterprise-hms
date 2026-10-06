@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 import { and, eq, or, ilike, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
 import { db, patients } from "@/lib/db";
 import { paginationSchema } from "@/lib/validations/common";
-import { patientDateOfBirthSchema } from "@/lib/validations/patient";
+import { patientSchema } from "@/lib/validations/patient";
 import { recordAudit } from "@/lib/audit";
 import { nextBusinessId } from "@/lib/business-id";
 
@@ -104,38 +103,17 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
-    const {
-      firstName,
-      lastName,
-      dateOfBirth,
-      gender,
-      bloodGroup,
-      phone,
-      email,
-      address,
-      department,
-      attendingDoctor,
-      status,
-      insuranceProvider,
-      insurancePolicyNumber,
-      emergencyContactName,
-      emergencyContactPhone,
-    } = body;
+    // Phase 21: the create endpoint previously destructured the raw body with
+    // a hand-rolled required-fields check and only validated dateOfBirth, so
+    // arbitrary strings reached the database (status, gender, oversized
+    // fields). The full schema is applied server-side; the client form uses
+    // the same schema as its zodResolver, so legitimate payloads are
+    // unaffected.
+    const parsed = patientSchema.safeParse(body);
 
-    if (!firstName || !lastName || !dateOfBirth || !gender || !phone || !department || !attendingDoctor) {
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 }
-      );
-    }
-
-    const dobParsed = z
-      .object({ dateOfBirth: patientDateOfBirthSchema })
-      .safeParse({ dateOfBirth });
-
-    if (!dobParsed.success) {
-      return NextResponse.json(
-        { error: "Validation failed", details: dobParsed.error.flatten().fieldErrors },
+        { error: "Validation failed", details: parsed.error.flatten().fieldErrors },
         { status: 400 }
       );
     }
@@ -146,21 +124,21 @@ export async function POST(request: NextRequest) {
       .insert(patients)
       .values({
         patientId,
-        firstName,
-        lastName,
-        dateOfBirth: new Date(dateOfBirth),
-        gender,
-        bloodGroup: bloodGroup || null,
-        phone,
-        email: email || null,
-        address: address || null,
-        department,
-        attendingDoctor,
-        status: status || "Active",
-        insuranceProvider: insuranceProvider || null,
-        insurancePolicyNumber: insurancePolicyNumber || null,
-        emergencyContactName: emergencyContactName || null,
-        emergencyContactPhone: emergencyContactPhone || null,
+        firstName: parsed.data.firstName,
+        lastName: parsed.data.lastName,
+        dateOfBirth: new Date(parsed.data.dateOfBirth),
+        gender: parsed.data.gender,
+        bloodGroup: parsed.data.bloodGroup || null,
+        phone: parsed.data.phone,
+        email: parsed.data.email || null,
+        address: parsed.data.address || null,
+        department: parsed.data.department,
+        attendingDoctor: parsed.data.attendingDoctor,
+        status: parsed.data.status,
+        insuranceProvider: parsed.data.insuranceProvider || null,
+        insurancePolicyNumber: parsed.data.insurancePolicyNumber || null,
+        emergencyContactName: parsed.data.emergencyContactName || null,
+        emergencyContactPhone: parsed.data.emergencyContactPhone || null,
       })
       .returning();
 

@@ -91,6 +91,19 @@ export async function PUT(
     }
 
     const body = await request.json();
+
+    // Phase 21: patient status transitions (admission/discharge/critical) are
+    // owned by the dedicated workflow endpoints, which run bed bookkeeping and
+    // per-transition audit entries. A generic PUT of `status` bypassed all of
+    // that (an enum-valid value still skipped the workflow), so an explicit
+    // status key is rejected outright.
+    if (typeof body === "object" && body !== null && "status" in body) {
+      return NextResponse.json(
+        { error: "Patient status is managed by the admission/discharge workflow" },
+        { status: 400 }
+      );
+    }
+
     const parsed = updatePatientSchema.safeParse(body);
 
     if (!parsed.success) {
@@ -100,14 +113,18 @@ export async function PUT(
       );
     }
 
-    const { dateOfBirth, status, ...rest } = parsed.data;
+    const { dateOfBirth, ...rest } = parsed.data;
+    // updatePatientSchema is patientSchema.partial(); the status field keeps
+    // its Zod `.default("Active")`, which fabricates a value even when the
+    // input omitted it. The gate above rejected explicit status, so strip the
+    // fabricated one — profile updates must never write the workflow column.
+    delete rest.status;
 
     const [updatedPatient] = await db
       .update(patients)
       .set({
         ...rest,
         ...(dateOfBirth ? { dateOfBirth: new Date(dateOfBirth) } : {}),
-        ...(status !== undefined && "status" in body ? { status } : {}),
         updatedAt: new Date(),
       })
       .where(eq(patients.id, id))

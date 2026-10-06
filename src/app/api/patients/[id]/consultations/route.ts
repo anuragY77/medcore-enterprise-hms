@@ -131,7 +131,9 @@ export async function POST(
       .insert(consultations)
       .values({
         patientId: id,
-        doctorName: parsed.data.doctorName,
+        // Phase 21: attribution is server-authoritative — stored as the
+        // authenticated user, not the client-supplied name.
+        doctorName: session.user.name,
         chiefComplaint: parsed.data.chiefComplaint,
         diagnosis: parsed.data.diagnosis,
         treatmentPlan: parsed.data.treatmentPlan || null,
