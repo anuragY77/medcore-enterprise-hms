@@ -145,7 +145,10 @@ export async function POST(
         frequency: parsed.data.frequency,
         duration: parsed.data.duration || null,
         instructions: parsed.data.instructions || null,
-        prescribedBy: parsed.data.prescribedBy,
+        // Phase 21: attribution is server-authoritative — the client-supplied
+        // name is never persisted, so a record cannot be attributed to a
+        // doctor who did not author it.
+        prescribedBy: session.user.name,
         startDate: parsed.data.startDate ? new Date(parsed.data.startDate) : null,
         endDate: parsed.data.endDate ? new Date(parsed.data.endDate) : null,
       })

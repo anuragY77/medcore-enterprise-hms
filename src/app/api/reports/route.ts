@@ -14,6 +14,7 @@ import {
   surgeries,
 } from "@/lib/db";
 import { reportQuerySchema } from "@/lib/validations/reports";
+import { dashboardVisibility } from "@/lib/dashboard-access";
 
 function startOfDay(dateStr: string): Date {
   if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
@@ -57,6 +58,13 @@ export async function GET(request: NextRequest) {
     if (!hasPermission(session.user.role, "reports:read")) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+
+    // Phase 21: `reports:read` grants the operational report, but the
+    // financial block (invoice/claim money) requires `billing:read`, the same
+    // rule the dashboard enforces via dashboardVisibility(). Without it,
+    // DOCTOR/LAB_TECHNICIAN (reports:read but no billing:read) received full
+    // revenue figures here.
+    const canReadFinancial = dashboardVisibility(session.user.role).financial;
 
     const { searchParams } = new URL(request.url);
     const raw: Record<string, string> = {};
@@ -240,17 +248,19 @@ export async function GET(request: NextRequest) {
           patientsByGender: groupToMap(patientByGender),
           patientsByDepartment: groupToMap(patientByDepartment),
         },
-        financial: {
-          totalInvoiced: round2(totalInvoiced),
-          totalPaid: round2(totalPaid),
-          totalOutstanding: round2(totalInvoiced - totalPaid),
-          invoiceCount: toNumber(invoiceTotals[0]?.invoiceCount),
-          invoicesByStatus: groupToMap(invoicesByStatus),
-          claimCount: toNumber(claimTotals[0]?.claimCount),
-          totalClaimAmount: round2(totalClaimAmount),
-          totalApprovedAmount: round2(totalApprovedAmount),
-          claimsByStatus: groupToMap(claimsByStatus),
-        },
+        financial: canReadFinancial
+          ? {
+              totalInvoiced: round2(totalInvoiced),
+              totalPaid: round2(totalPaid),
+              totalOutstanding: round2(totalInvoiced - totalPaid),
+              invoiceCount: toNumber(invoiceTotals[0]?.invoiceCount),
+              invoicesByStatus: groupToMap(invoicesByStatus),
+              claimCount: toNumber(claimTotals[0]?.claimCount),
+              totalClaimAmount: round2(totalClaimAmount),
+              totalApprovedAmount: round2(totalApprovedAmount),
+              claimsByStatus: groupToMap(claimsByStatus),
+            }
+          : null,
         operations: {
           appointments: {
             total: toNumber(appointmentTotal[0]?.value),

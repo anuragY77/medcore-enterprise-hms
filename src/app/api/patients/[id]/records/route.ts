@@ -5,6 +5,7 @@ import { hasPermission } from "@/types/auth";
 import { db, medicalRecords, patients } from "@/lib/db";
 import { paginationSchema, idParamSchema } from "@/lib/validations/common";
 import { medicalRecordSchema } from "@/lib/validations/clinical";
+import { recordAudit } from "@/lib/audit";
 
 export async function GET(
   request: NextRequest,
@@ -142,10 +143,27 @@ export async function POST(
         title: parsed.data.title,
         description: parsed.data.description || null,
         fileUrl: parsed.data.fileUrl || null,
-        recordedBy: parsed.data.recordedBy,
+        // Phase 21: attribution is server-authoritative — stored as the
+        // authenticated user, not the client-supplied name.
+        recordedBy: session.user.name,
         recordDate: parsed.data.recordDate ? new Date(parsed.data.recordDate) : new Date(),
       })
       .returning();
+
+    await recordAudit({
+      actorId: session.user.id,
+      action: "medical_record.create",
+      entityType: "medicalRecord",
+      entityId: newRecord.id,
+      severity: "INFO",
+      category: "patients",
+      success: true,
+      metadata: {
+        patientId: newRecord.patientId,
+        recordType: newRecord.recordType,
+        title: newRecord.title,
+      },
+    });
 
     return NextResponse.json(newRecord, { status: 201 });
   } catch (error) {

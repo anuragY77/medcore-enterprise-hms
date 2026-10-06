@@ -52,4 +52,20 @@ describe("sanitizeCallbackUrl (Phase 20 open-redirect fix)", () => {
     expect(sanitizeCallbackUrl("/\n/evil.example")).toBe("/");
     expect(sanitizeCallbackUrl("/\r//evil.example")).toBe("/");
   });
+
+  it("treats percent-encoded slashes as same-app path content (no decode step)", () => {
+    // Phase 21 hardening pass: the sanitizer never percent-decodes, and
+    // browsers do not treat %2f as a path separator when parsing authority,
+    // so these resolve on-origin (they are odd 404 paths, not redirects).
+    expect(sanitizeCallbackUrl("/%2f%2fevil.example")).toBe("/%2f%2fevil.example");
+    expect(sanitizeCallbackUrl("/%252f%252fevil.example")).toBe(
+      "/%252f%252fevil.example"
+    );
+  });
+
+  it("rejects inputs that only look like paths after leading whitespace", () => {
+    expect(sanitizeCallbackUrl(" //evil.example")).toBe("/");
+    expect(sanitizeCallbackUrl(" /dashboard")).toBe("/");
+    expect(sanitizeCallbackUrl("\\evil.example")).toBe("/");
+  });
 });

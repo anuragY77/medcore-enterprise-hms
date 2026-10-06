@@ -33,6 +33,8 @@ interface ReportsData {
     patientsByGender: Record<string, number>;
     patientsByDepartment: Record<string, number>;
   };
+  // Null when the API withheld the financial block (no billing:read) — Phase
+  // 21 server-side gate; the UI must not render money figures it did not get.
   financial: {
     totalInvoiced: number;
     totalPaid: number;
@@ -43,7 +45,7 @@ interface ReportsData {
     totalClaimAmount: number;
     totalApprovedAmount: number;
     claimsByStatus: Record<string, number>;
-  };
+  } | null;
   operations: {
     appointments: {
       total: number;
@@ -390,20 +392,24 @@ export default function ReportsPage() {
                   icon={Scissors}
                   color="text-rose-600"
                 />
-                <ReportCard
-                  label="Invoices"
-                  value={formatCount(report.financial.invoiceCount)}
-                  hint={`Outstanding ${formatMoney(report.financial.totalOutstanding)}`}
-                  icon={Receipt}
-                  color="text-amber-600"
-                />
-                <ReportCard
-                  label="Insurance Claims"
-                  value={formatCount(report.financial.claimCount)}
-                  hint={`Approved ${formatMoney(report.financial.totalApprovedAmount)}`}
-                  icon={AlertTriangle}
-                  color="text-cyan-600"
-                />
+                {financial && (
+                  <>
+                    <ReportCard
+                      label="Invoices"
+                      value={formatCount(financial.invoiceCount)}
+                      hint={`Outstanding ${formatMoney(financial.totalOutstanding)}`}
+                      icon={Receipt}
+                      color="text-amber-600"
+                    />
+                    <ReportCard
+                      label="Insurance Claims"
+                      value={formatCount(financial.claimCount)}
+                      hint={`Approved ${formatMoney(financial.totalApprovedAmount)}`}
+                      icon={AlertTriangle}
+                      color="text-cyan-600"
+                    />
+                  </>
+                )}
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -457,49 +463,51 @@ export default function ReportsPage() {
                   </div>
                 </ReportSection>
 
-                <ReportSection
-                  title="Billing / Insurance"
-                  description="Invoice and claim totals for the selected range"
-                >
-                  <MetricRow
-                    label="Total invoiced"
-                    value={formatMoney(report.financial.totalInvoiced)}
-                  />
-                  <MetricRow
-                    label="Total paid"
-                    value={formatMoney(report.financial.totalPaid)}
-                  />
-                  <MetricRow
-                    label="Total outstanding"
-                    value={formatMoney(report.financial.totalOutstanding)}
-                  />
-                  <MetricRow
-                    label="Invoice count"
-                    value={formatCount(report.financial.invoiceCount)}
-                  />
-                  <MetricRow
-                    label="Claim count"
-                    value={formatCount(report.financial.claimCount)}
-                  />
-                  <MetricRow
-                    label="Total claim amount"
-                    value={formatMoney(report.financial.totalClaimAmount)}
-                  />
-                  <MetricRow
-                    label="Total approved amount"
-                    value={formatMoney(report.financial.totalApprovedAmount)}
-                  />
-                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <BreakdownList
-                      title="Invoices by status"
-                      entries={toEntries(report.financial.invoicesByStatus)}
+                {financial && (
+                  <ReportSection
+                    title="Billing / Insurance"
+                    description="Invoice and claim totals for the selected range"
+                  >
+                    <MetricRow
+                      label="Total invoiced"
+                      value={formatMoney(financial.totalInvoiced)}
                     />
-                    <BreakdownList
-                      title="Claims by status"
-                      entries={toEntries(report.financial.claimsByStatus)}
+                    <MetricRow
+                      label="Total paid"
+                      value={formatMoney(financial.totalPaid)}
                     />
-                  </div>
-                </ReportSection>
+                    <MetricRow
+                      label="Total outstanding"
+                      value={formatMoney(financial.totalOutstanding)}
+                    />
+                    <MetricRow
+                      label="Invoice count"
+                      value={formatCount(financial.invoiceCount)}
+                    />
+                    <MetricRow
+                      label="Claim count"
+                      value={formatCount(financial.claimCount)}
+                    />
+                    <MetricRow
+                      label="Total claim amount"
+                      value={formatMoney(financial.totalClaimAmount)}
+                    />
+                    <MetricRow
+                      label="Total approved amount"
+                      value={formatMoney(financial.totalApprovedAmount)}
+                    />
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <BreakdownList
+                        title="Invoices by status"
+                        entries={toEntries(financial.invoicesByStatus)}
+                      />
+                      <BreakdownList
+                        title="Claims by status"
+                        entries={toEntries(financial.claimsByStatus)}
+                      />
+                    </div>
+                  </ReportSection>
+                )}
 
                 <ReportSection
                   title="Bed Utilization"
