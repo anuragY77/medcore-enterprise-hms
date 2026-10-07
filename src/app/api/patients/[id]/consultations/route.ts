@@ -117,7 +117,15 @@ export async function POST(
       return NextResponse.json({ error: "Patient not found" }, { status: 404 });
     }
 
-    const body = await request.json();
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Validation failed", details: { body: ["Invalid JSON"] } },
+        { status: 400 }
+      );
+    }
     const parsed = consultationSchema.safeParse(body);
 
     if (!parsed.success) {
