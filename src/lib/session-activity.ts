@@ -220,17 +220,26 @@ export async function tombstoneSessionActivity(
  * exceeds the 12h absolute lifetime, so pruning can never remove the state
  * of a session that could still be valid. Errors propagate to the caller,
  * which treats pruning as best-effort (never blocks login).
+ *
+ * Phase 24: BOTH the activity timestamp and the row's age must be beyond
+ * the retention window. A sign-out tombstone (see tombstoneSessionActivity)
+ * stores epoch `last_activity`, so an activity-only cutoff matched and
+ * deleted it on the very next sign-in — and the missing-row path then
+ * re-seeded activity from the replayed token's `authAt`, resurrecting a
+ * session that had been signed out (reproduced live: concurrent logout +
+ * login left the pre-logout cookie fully authenticated in 5 of 6 rounds).
+ * Requiring `created_at` past the window keeps tombstones for 24h — far
+ * beyond the 12h absolute lifetime of the token they revoke — while
+ * ordinary stale rows (both columns old) still prune exactly as before.
  */
 export async function sweepStaleSessionActivity(
   handle: SessionActivityDb = db
 ): Promise<void> {
+  const cutoff = sql`now() - ${SESSION_ACTIVITY_RETENTION_HOURS}::integer * interval '1 hour'`;
   await handle
     .delete(sessionActivity)
     .where(
-      lt(
-        sessionActivity.lastActivity,
-        sql`now() - ${SESSION_ACTIVITY_RETENTION_HOURS}::integer * interval '1 hour'`
-      )
+      and(lt(sessionActivity.lastActivity, cutoff), lt(sessionActivity.createdAt, cutoff))
     );
 }
 

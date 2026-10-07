@@ -17,9 +17,17 @@ import type { NextConfig } from "next";
 //   them. Phase 22 live probe demonstrated the header was absent — no-store
 //   forbids any storage beyond the browser's own memory.
 //
-// Deliberately NOT set here (documented in the Phase 21 report):
-// - CSP: the app has no asset inventory/nonce pipeline yet; a wrong CSP
-//   would silently break the dashboard. Tracked as follow-up hardening.
+// Deliberately NOT set here (documented in the Phase 21/24 reports):
+// - CSP script-src/default-src (see Phase 24 note below).
+// - Phase 24 CSP (safe subset): frame-ancestors/object-src/base-uri/
+//   form-action are enforced now — they never touch script/style loading,
+//   so they cannot break the Next.js inline bootstrap. script-src and
+//   default-src are deliberately omitted: a nonce pipeline would force every
+//   page to dynamic rendering (the app's dashboard pages are build-time
+//   prerendered shells behind the proxy auth gate), and framework inline
+//   scripts are reported to ignore the request nonce on the Next 16.2.x line
+//   (vercel/next.js#95433, auto-closed without a fix), which would break
+//   hydration under enforcement. Revisit after those two blockers clear.
 // - HSTS: the app is served over plain HTTP on localhost in dev/staging and
 //   this config is shared across environments; enabling it locally would
 //   pin browsers to HTTPS for localhost. Tracked for TLS termination.
@@ -38,6 +46,11 @@ const nextConfig: NextConfig = {
             value: "camera=(), microphone=(), geolocation=()",
           },
           { key: "X-XSS-Protection", value: "0" },
+          {
+            key: "Content-Security-Policy",
+            value:
+              "frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'",
+          },
         ],
       },
       {

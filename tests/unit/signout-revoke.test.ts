@@ -65,11 +65,33 @@ async function craftToken(
   })) as string;
 }
 
-function handlerResponse(status: number, url = "http://localhost:3000/login") {
-  return new Response(JSON.stringify({ url }), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
+function handlerResponse(
+  status: number,
+  url = "http://localhost:3000/login",
+  opts: { clearSession?: boolean } = {}
+) {
+  const headers = new Headers({ "content-type": "application/json" });
+  // Mirrors real Auth.js behavior: a SUCCESSFUL sign-out always clears the
+  // session cookie in Set-Cookie (both the 200 JSON path used by the browser
+  // client and the 302 redirect path used by header-less API clients), while
+  // error responses set no cookie at all. Phase 24: that clearing header is
+  // the revocation success signal for redirect-mode sign-outs.
+  const clear = opts.clearSession ?? status < 400;
+  if (clear) {
+    for (const name of ["authjs.session-token", "__Secure-authjs.session-token"]) {
+      headers.append(
+        "set-cookie",
+        `${name}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; HttpOnly; SameSite=Lax${
+          name.startsWith("__Secure-") ? "; Secure" : ""
+        }`
+      );
+    }
+  }
+  if (status >= 300 && status < 400) {
+    headers.set("location", url);
+    return new Response(null, { status, headers });
+  }
+  return new Response(JSON.stringify({ url }), { status, headers });
 }
 
 async function post(options: {
@@ -170,5 +192,49 @@ describe("POST /api/auth/signout revocation (Phase 20)", () => {
     expect(logMock).toHaveBeenCalledTimes(1);
     expect(logMock.mock.calls[0][0]).toBe("signout-revoke");
     expect(logMock.mock.calls[0][2]).toBe("best-effort");
+  });
+
+  // Phase 24: redirect-mode sign-out revocation.
+  //
+  // Reproduced live: Auth.js answers sign-out POSTs without the
+  // `X-Auth-Return-Redirect` header (API/script clients) with 302 +
+  // session-clearing Set-Cookie. Gating revocation on `response.ok` alone
+  // skipped the tombstone there, so a saved copy of the pre-logout cookie
+  // kept returning a full session until idle/absolute expiry.
+  it("tombstones a redirect-mode (302) successful sign-out (Phase 24)", async () => {
+    handlersPost.mockResolvedValue(
+      handlerResponse(302, "http://localhost:3000/")
+    );
+    const token = await craftToken({ sub: "usr_g", sid: "sid-signout-g" });
+    const res = await post({ cookie: `${LEGACY_COOKIE}=${token}` });
+    expect(res.status).toBe(302);
+    expect(tombstoneMock).toHaveBeenCalledTimes(1);
+    expect(tombstoneMock).toHaveBeenCalledWith({
+      sid: "sid-signout-g",
+      userId: "usr_g",
+    });
+  });
+
+  it("skips the tombstone on a 302 error redirect that clears no cookie (Phase 24)", async () => {
+    handlersPost.mockResolvedValue(
+      handlerResponse(302, "http://localhost:3000/login?error=MissingCSRF", {
+        clearSession: false,
+      })
+    );
+    const token = await craftToken({ sub: "usr_h", sid: "sid-signout-h" });
+    const res = await post({ cookie: `${LEGACY_COOKIE}=${token}` });
+    expect(res.status).toBe(302);
+    expect(tombstoneMock).not.toHaveBeenCalled();
+    expect(logMock).not.toHaveBeenCalled();
+  });
+
+  it("skips the tombstone on a 3xx response without a clearing Set-Cookie (Phase 24)", async () => {
+    handlersPost.mockResolvedValue(
+      handlerResponse(307, "http://localhost:3000/", { clearSession: false })
+    );
+    const token = await craftToken({ sub: "usr_i", sid: "sid-signout-i" });
+    const res = await post({ cookie: `${LEGACY_COOKIE}=${token}` });
+    expect(res.status).toBe(307);
+    expect(tombstoneMock).not.toHaveBeenCalled();
   });
 });

@@ -261,15 +261,61 @@ describe.skipIf(!RUN)("session activity store integration", () => {
     const staleSid = uniqueSid("sweep-stale");
     await recordSessionActivity({ sid: freshSid, userId }, db);
     await recordSessionActivity({ sid: staleSid, userId }, db);
+    // A naturally stale row is old in BOTH columns: it was created before
+    // the window and has had no activity inside it.
     await ctx.pool.query(
       `UPDATE session_activity
-       SET last_activity = now() - make_interval(hours => ${SESSION_ACTIVITY_RETENTION_HOURS + 1})
+       SET last_activity = now() - make_interval(hours => ${SESSION_ACTIVITY_RETENTION_HOURS + 1}),
+           created_at = now() - make_interval(hours => ${SESSION_ACTIVITY_RETENTION_HOURS + 1})
        WHERE sid = $1`,
       [staleSid]
     );
     await sweepStaleSessionActivity(db);
     expect(await activityRow(staleSid)).toBeUndefined();
     expect(await activityRow(freshSid)).toBeDefined();
+  });
+
+  // Phase 24: sign-out tombstones store epoch last_activity, so an
+  // activity-only retention cutoff matched (and deleted) them on the very
+  // next sign-in sweep — after which checkSessionActivity's missing-row path
+  // re-seeded activity from a replayed token's authAt and the signed-out
+  // session came back to life (reproduced live: 5 of 6 concurrent
+  // logout+login rounds left the pre-logout cookie authenticated).
+  it("keeps a fresh sign-out tombstone despite the sweep (Phase 24)", async () => {
+    const sid = uniqueSid("tombstone-fresh");
+    await recordSessionActivity({ sid, userId }, db);
+    await tombstoneSessionActivity({ sid, userId }, db);
+    await sweepStaleSessionActivity(db);
+    const row = await activityRow(sid);
+    expect(row).toBeDefined();
+    expect(new Date(row!.last_activity).getTime()).toBeLessThan(
+      new Date("2000-01-01").getTime()
+    );
+    // Once the row is older than the window the token it revokes is beyond
+    // its 12h absolute lifetime, so reclaiming it is safe again.
+    await ctx.pool.query(
+      `UPDATE session_activity
+       SET created_at = now() - make_interval(hours => ${SESSION_ACTIVITY_RETENTION_HOURS + 1})
+       WHERE sid = $1`,
+      [sid]
+    );
+    await sweepStaleSessionActivity(db);
+    expect(await activityRow(sid)).toBeUndefined();
+  });
+
+  it("cannot resurrect a signed-out session after a sweep (Phase 24)", async () => {
+    const sid = uniqueSid("tombstone-resurrect");
+    await recordSessionActivity({ sid, userId }, db);
+    await tombstoneSessionActivity({ sid, userId }, db);
+    await sweepStaleSessionActivity(db);
+    // A replayed cookie re-checks with the token's absolute sign-in time.
+    // The tombstone row must still answer "expired" instead of letting the
+    // missing-row path seed a fresh window from authAt.
+    const result = await checkSessionActivity(
+      { sid, userId, authAt: Math.floor(Date.now() / 1000), idleSeconds: IDLE },
+      db
+    );
+    expect(result.kind).toBe("idle_expired");
   });
 
   it("marks an expiry as audited exactly once", async () => {
