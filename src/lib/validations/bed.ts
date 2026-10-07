@@ -16,12 +16,12 @@ export const bedSchema = z.object({
 export type BedFormData = z.infer<typeof bedSchema>;
 
 export const bedSearchSchema = z.object({
-  query: z.string().optional(),
+  query: z.string().max(200).optional(),
   department: z.string().optional(),
   status: z.enum(["All", "Available", "Occupied", "Maintenance", "Reserved"]).default("All"),
   type: z.enum(["All", "General", "ICU", "Private", "Semi-Private"]).default("All"),
   roomNumber: z.string().optional(),
-  page: z.coerce.number({ message: "Page must be a number" }).int().min(1).default(1),
+  page: z.coerce.number({ message: "Page must be a number" }).int().min(1).max(100000).default(1),
   limit: z.coerce.number({ message: "Limit must be a number" }).int().min(1).max(100).default(20),
 });
 

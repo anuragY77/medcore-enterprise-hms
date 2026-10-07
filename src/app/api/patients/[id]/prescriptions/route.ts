@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { and, eq, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
-import { db, prescriptions, patients } from "@/lib/db";
+import { db, prescriptions, patients, consultations } from "@/lib/db";
 import { paginationSchema, idParamSchema } from "@/lib/validations/common";
 import { prescriptionSchema } from "@/lib/validations/clinical";
 import { recordAudit } from "@/lib/audit";
@@ -133,6 +133,29 @@ export async function POST(
         { error: "Validation failed", details: parsed.error.flatten().fieldErrors },
         { status: 400 }
       );
+    }
+
+    // Phase 22: the linked consultation must exist and belong to the patient
+    // in the path. Without this check a caller could attach a prescription to
+    // another patient's consultation (cross-patient PHI linkage) or send a
+    // nonexistent UUID straight to the foreign key (23503 -> 500).
+    if (parsed.data.consultationId) {
+      const [consultation] = await db
+        .select({ id: consultations.id, patientId: consultations.patientId })
+        .from(consultations)
+        .where(eq(consultations.id, parsed.data.consultationId))
+        .limit(1);
+
+      if (!consultation) {
+        return NextResponse.json({ error: "Consultation not found" }, { status: 404 });
+      }
+
+      if (consultation.patientId !== id) {
+        return NextResponse.json(
+          { error: "Consultation does not belong to this patient" },
+          { status: 409 }
+        );
+      }
     }
 
     const [newPrescription] = await db

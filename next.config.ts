@@ -12,6 +12,10 @@ import type { NextConfig } from "next";
 // - X-XSS-Protection: 0 disables the legacy auditor, which is known to be
 //   bypassable and can INTRODUCE XSS on older browsers (OWASP guidance).
 // - poweredByHeader: false: stops advertising the framework version.
+// - Cache-Control on /api: API responses carry PHI/financial data keyed by
+//   session cookies; without an explicit directive a shared cache may store
+//   them. Phase 22 live probe demonstrated the header was absent — no-store
+//   forbids any storage beyond the browser's own memory.
 //
 // Deliberately NOT set here (documented in the Phase 21 report):
 // - CSP: the app has no asset inventory/nonce pipeline yet; a wrong CSP
@@ -35,6 +39,10 @@ const nextConfig: NextConfig = {
           },
           { key: "X-XSS-Protection", value: "0" },
         ],
+      },
+      {
+        source: "/api/:path*",
+        headers: [{ key: "Cache-Control", value: "no-store" }],
       },
     ];
   },

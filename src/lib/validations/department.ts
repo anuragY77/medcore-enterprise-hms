@@ -2,14 +2,15 @@ import { z } from "zod";
 
 export const departmentSchema = z.object({
   name: z.string().min(1, "Department name is required").max(100),
-  description: z.string().optional(),
-  headDoctor: z.string().optional(),
+  description: z.string().max(20000).optional(),
+  headDoctor: z.string().max(200).optional(),
   phone: z.string().max(20).optional(),
   location: z.string().max(200).optional(),
   totalBeds: z
     .number({ message: "Total beds must be a number" })
     .int()
     .min(0, "Total beds must be non-negative")
+    .max(2147483647, "Total beds is too large")
     .optional()
     .nullable(),
   status: z.enum(["Active", "Inactive"], {
@@ -20,9 +21,9 @@ export const departmentSchema = z.object({
 export type DepartmentFormData = z.infer<typeof departmentSchema>;
 
 export const departmentSearchSchema = z.object({
-  query: z.string().optional(),
+  query: z.string().max(200).optional(),
   status: z.enum(["All", "Active", "Inactive"]).default("All"),
-  page: z.coerce.number({ message: "Page must be a number" }).int().min(1).default(1),
+  page: z.coerce.number({ message: "Page must be a number" }).int().min(1).max(100000).default(1),
   limit: z.coerce.number({ message: "Limit must be a number" }).int().min(1).max(100).default(20),
 });
 

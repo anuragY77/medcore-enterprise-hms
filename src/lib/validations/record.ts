@@ -6,7 +6,12 @@ export const recordQuerySchema = z.object({
   recordType: z.enum(medicalRecordSchema.shape.recordType.options).optional(),
   patientId: z.string().uuid({ message: "Invalid patient ID" }).optional(),
   order: z.enum(["asc", "desc"], { message: "Invalid order" }).default("desc"),
-  page: z.coerce.number().int().min(1, "Page must be at least 1").default(1),
+  page: z.coerce
+    .number()
+    .int()
+    .min(1, "Page must be at least 1")
+    .max(100000, "Page must be at most 100000")
+    .default(1),
   pageSize: z.coerce
     .number()
     .int()

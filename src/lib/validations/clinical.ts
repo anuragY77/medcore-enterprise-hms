@@ -1,12 +1,13 @@
 import { z } from "zod";
+import { optionalDateFieldSchema } from "./common";
 
 export const consultationSchema = z.object({
   doctorName: z.string().min(1, "Doctor name is required").max(200),
   chiefComplaint: z.string().min(1, "Chief complaint is required").max(500),
-  diagnosis: z.string().min(1, "Diagnosis is required"),
-  treatmentPlan: z.string().optional(),
-  notes: z.string().optional(),
-  followUpDate: z.string().optional(),
+  diagnosis: z.string().min(1, "Diagnosis is required").max(20000),
+  treatmentPlan: z.string().max(20000).optional(),
+  notes: z.string().max(20000).optional(),
+  followUpDate: optionalDateFieldSchema,
 });
 
 export type ConsultationFormData = z.infer<typeof consultationSchema>;
@@ -15,11 +16,11 @@ export const prescriptionSchema = z.object({
   medicationName: z.string().min(1, "Medication name is required").max(200),
   dosage: z.string().min(1, "Dosage is required").max(100),
   frequency: z.string().min(1, "Frequency is required").max(100),
-  duration: z.string().optional(),
-  instructions: z.string().optional(),
+  duration: z.string().max(100).optional(),
+  instructions: z.string().max(20000).optional(),
   prescribedBy: z.string().min(1, "Prescribing doctor is required").max(200),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
+  startDate: optionalDateFieldSchema,
+  endDate: optionalDateFieldSchema,
   consultationId: z.string().uuid().optional().or(z.literal("")),
 });
 
@@ -30,10 +31,10 @@ export const medicalRecordSchema = z.object({
     message: "Record type is required",
   }),
   title: z.string().min(1, "Title is required").max(200),
-  description: z.string().optional(),
+  description: z.string().max(20000).optional(),
   fileUrl: z.string().url("Invalid URL").optional().or(z.literal("")),
   recordedBy: z.string().min(1, "Recorded by is required").max(200),
-  recordDate: z.string().optional(),
+  recordDate: optionalDateFieldSchema,
 });
 
 export type MedicalRecordFormData = z.infer<typeof medicalRecordSchema>;
@@ -93,27 +94,27 @@ export const vitalSchema = z.object({
     .optional()
     .nullable(),
   recordedBy: z.string().min(1, "Recorded by is required").max(200),
-  recordedAt: z.string().optional(),
+  recordedAt: optionalDateFieldSchema,
 });
 
 export type VitalFormData = z.infer<typeof vitalSchema>;
 
 export const dischargeSchema = z.object({
-  diagnosis: z.string().min(1, "Discharge diagnosis is required"),
-  treatmentSummary: z.string().min(1, "Treatment summary is required"),
-  followUpInstructions: z.string().optional(),
-  medicationsOnDischarge: z.string().optional(),
-  followUpDate: z.string().optional(),
-  notes: z.string().optional(),
+  diagnosis: z.string().min(1, "Discharge diagnosis is required").max(20000),
+  treatmentSummary: z.string().min(1, "Treatment summary is required").max(20000),
+  followUpInstructions: z.string().max(20000).optional(),
+  medicationsOnDischarge: z.string().max(20000).optional(),
+  followUpDate: optionalDateFieldSchema,
+  notes: z.string().max(20000).optional(),
 });
 
 export type DischargeFormData = z.infer<typeof dischargeSchema>;
 
 export const admissionSchema = z.object({
-  department: z.string().min(1, "Department is required"),
-  attendingDoctor: z.string().min(1, "Attending doctor is required"),
-  reason: z.string().min(1, "Admission reason is required"),
-  notes: z.string().optional(),
+  department: z.string().min(1, "Department is required").max(100),
+  attendingDoctor: z.string().min(1, "Attending doctor is required").max(200),
+  reason: z.string().min(1, "Admission reason is required").max(20000),
+  notes: z.string().max(20000).optional(),
 });
 
 export type AdmissionFormData = z.infer<typeof admissionSchema>;
