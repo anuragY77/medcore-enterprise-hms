@@ -84,6 +84,16 @@ async function enforceSessionResponse(
  * tombstoneSessionActivity) makes that resurrected token fail the liveness
  * gate on its very next request instead of resuming a live session.
  *
+ * Phase 24: the success signal is the session-clearing Set-Cookie, not the
+ * status class alone. Auth.js answers redirect-mode signout POSTs (any
+ * client that does NOT send `X-Auth-Return-Redirect`, e.g. API/script
+ * clients) with 302 — `response.ok` is false there, so gating on 2xx
+ * silently skipped revocation and a saved copy of the cookie stayed fully
+ * authenticated until idle/absolute expiry (reproduced live). A successful
+ * signout ALWAYS clears the session cookie in Set-Cookie (200 JSON or 302),
+ * while error paths (e.g. MissingCSRF) set no cookie at all — so tombstone
+ * exactly when that clearing header is present on a 2xx/3xx response.
+ *
  * Best-effort by policy: sign-out must succeed even during a store outage,
  * and liveness already fails closed for every request while the store is
  * unreachable. Decode failures (no/foreign/garbage cookie) simply skip the
@@ -93,12 +103,19 @@ async function revokeOnSignout(
   request: NextRequest,
   response: Response
 ): Promise<Response> {
-  if (!response.ok || new URL(request.url).pathname !== SIGNOUT_PATH) {
+  if (new URL(request.url).pathname !== SIGNOUT_PATH) return response;
+  if (!(response.ok || (response.status >= 300 && response.status < 400))) {
     return response;
   }
   const cookieName = request.cookies.has(SECURE_SESSION_COOKIE)
     ? SECURE_SESSION_COOKIE
     : LEGACY_SESSION_COOKIE;
+  // Only a successful signout clears the session cookie; error redirects
+  // (bad CSRF, configuration) set no cookie and must not revoke anything.
+  const clearedSession = response.headers
+    .getSetCookie()
+    .some((entry) => entry.split(";")[0] === `${cookieName}=`);
+  if (!clearedSession) return response;
   const token = request.cookies.get(cookieName)?.value;
   if (!token) return response;
 
