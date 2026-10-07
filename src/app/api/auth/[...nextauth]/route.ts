@@ -1,4 +1,4 @@
-import type { NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { decode } from "next-auth/jwt";
 import { handlers } from "@/lib/auth";
 import { enforceSessionLiveness } from "@/lib/session-liveness";
@@ -140,6 +140,29 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Phase 23: Auth.js (5.0.0-beta.32) issues a full session for credentials
+  // callbacks that carry a foreign Origin header — reproduced live with a
+  // valid CSRF token and `Origin: https://evil.example`. The double-submit
+  // CSRF token and SameSite=Lax cookies blunt this in a browser, but the
+  // trust boundary must not depend on a header being ABSENT from the check:
+  // reject any cross-origin POST before any auth work runs. Same policy as
+  // POST /api/auth/activity (Phase 19): if an Origin is presented it must
+  // match AUTH_URL (or the request URL when AUTH_URL is unset); requests
+  // without an Origin (server-to-server, CLI probes) are unaffected.
+  const origin = request.headers.get("origin");
+  if (origin) {
+    try {
+      const expected = new URL(process.env.AUTH_URL ?? request.url).origin;
+      if (new URL(origin).origin !== expected) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    } catch {
+      // Unparseable Origin (including the literal "null" from sandboxed
+      // documents) is untrusted by definition.
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  }
+
   const attempt = await describeLoginAttempt(request);
   if (!attempt) {
     return revokeOnSignout(request, await handlers.POST(request));

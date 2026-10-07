@@ -90,7 +90,15 @@ export async function PUT(
       );
     }
 
-    const body = await request.json();
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Validation failed", details: { body: ["Invalid JSON"] } },
+        { status: 400 }
+      );
+    }
 
     // Phase 21: patient status transitions (admission/discharge/critical) are
     // owned by the dedicated workflow endpoints, which run bed bookkeeping and

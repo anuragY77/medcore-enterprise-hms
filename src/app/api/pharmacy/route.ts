@@ -101,7 +101,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const body = await request.json();
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Validation failed", details: { body: ["Invalid JSON"] } },
+        { status: 400 }
+      );
+    }
     const parsed = pharmacyMedicineSchema.safeParse(body);
 
     if (!parsed.success) {

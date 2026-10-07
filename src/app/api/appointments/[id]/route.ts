@@ -83,7 +83,15 @@ export async function PUT(
       return NextResponse.json({ error: "Appointment not found" }, { status: 404 });
     }
 
-    const body = await request.json();
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Validation failed", details: { body: ["Invalid JSON"] } },
+        { status: 400 }
+      );
+    }
     const parsed = appointmentSchema.partial().safeParse(body);
 
     if (!parsed.success) {
