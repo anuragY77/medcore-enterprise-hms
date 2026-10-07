@@ -3,7 +3,7 @@ import { z } from "zod";
 import { and, eq, or, ilike, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
-import { db, surgeries } from "@/lib/db";
+import { db, surgeries, patients, staff } from "@/lib/db";
 import { paginationSchema } from "@/lib/validations/common";
 import { surgerySchema } from "@/lib/validations/surgery";
 import { recordAudit } from "@/lib/audit";
@@ -142,6 +142,28 @@ export async function POST(request: NextRequest) {
         { error: "Validation failed", details: parsed.error.flatten().fieldErrors },
         { status: 400 }
       );
+    }
+
+    // Phase 22: referenced rows must exist before insert, so garbage UUIDs
+    // cannot reach the foreign keys (23503 -> 500).
+    const [patient] = await db
+      .select({ id: patients.id })
+      .from(patients)
+      .where(eq(patients.id, parsed.data.patientId))
+      .limit(1);
+
+    if (!patient) {
+      return NextResponse.json({ error: "Patient not found" }, { status: 404 });
+    }
+
+    const [surgeon] = await db
+      .select({ id: staff.id })
+      .from(staff)
+      .where(eq(staff.id, parsed.data.surgeonId))
+      .limit(1);
+
+    if (!surgeon) {
+      return NextResponse.json({ error: "Surgeon not found" }, { status: 404 });
     }
 
     const surgeryId = await nextBusinessId(db, "SRG");

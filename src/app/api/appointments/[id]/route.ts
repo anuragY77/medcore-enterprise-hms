@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
-import { db, appointments } from "@/lib/db";
+import { db, appointments, patients } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
 import { appointmentSchema } from "@/lib/validations/appointment";
 import { recordAudit } from "@/lib/audit";
@@ -91,6 +91,20 @@ export async function PUT(
         { error: "Validation failed", details: parsed.error.flatten().fieldErrors },
         { status: 400 }
       );
+    }
+
+    // Phase 22: a re-pointed patient must exist before it reaches the
+    // foreign key (23503 -> 500).
+    if (parsed.data.patientId) {
+      const [patient] = await db
+        .select({ id: patients.id })
+        .from(patients)
+        .where(eq(patients.id, parsed.data.patientId))
+        .limit(1);
+
+      if (!patient) {
+        return NextResponse.json({ error: "Patient not found" }, { status: 404 });
+      }
     }
 
     const [updatedAppointment] = await db

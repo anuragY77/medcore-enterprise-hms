@@ -9,7 +9,7 @@ export const NOTIFICATION_TYPES = [
 ] as const;
 
 export const notificationListQuerySchema = z.object({
-  page: z.coerce.number().int().min(1, "Page must be at least 1").default(1),
+  page: z.coerce.number().int().min(1, "Page must be at least 1").max(100000, "Page must be at most 100000").default(1),
   pageSize: z.coerce
     .number()
     .int()

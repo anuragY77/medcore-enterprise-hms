@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isStorableDate } from "./common";
 
 export const auditLogQuerySchema = z.object({
   search: z.string().max(200).optional(),
@@ -11,13 +12,13 @@ export const auditLogQuerySchema = z.object({
   success: z.enum(["true", "false"], { message: "Invalid success value" }).optional(),
   from: z
     .string()
-    .refine((v) => !Number.isNaN(Date.parse(v)), { message: "Invalid date" })
+    .refine(isStorableDate, { message: "Invalid date" })
     .optional(),
   to: z
     .string()
-    .refine((v) => !Number.isNaN(Date.parse(v)), { message: "Invalid date" })
+    .refine(isStorableDate, { message: "Invalid date" })
     .optional(),
-  page: z.coerce.number().int().min(1, "Page must be at least 1").default(1),
+  page: z.coerce.number().int().min(1, "Page must be at least 1").max(100000, "Page must be at most 100000").default(1),
   pageSize: z.coerce
     .number()
     .int()

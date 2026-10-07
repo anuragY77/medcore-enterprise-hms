@@ -3,7 +3,7 @@ import { z } from "zod";
 import { and, eq, or, ilike, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
-import { db, appointments } from "@/lib/db";
+import { db, appointments, patients } from "@/lib/db";
 import { paginationSchema } from "@/lib/validations/common";
 import { appointmentSchema } from "@/lib/validations/appointment";
 import { recordAudit } from "@/lib/audit";
@@ -142,6 +142,18 @@ export async function POST(request: NextRequest) {
         { error: "Validation failed", details: parsed.error.flatten().fieldErrors },
         { status: 400 }
       );
+    }
+
+    // Phase 22: reject unknown patients before insert so a garbage UUID
+    // cannot reach the foreign key (23503 -> 500).
+    const [patient] = await db
+      .select({ id: patients.id })
+      .from(patients)
+      .where(eq(patients.id, parsed.data.patientId))
+      .limit(1);
+
+    if (!patient) {
+      return NextResponse.json({ error: "Patient not found" }, { status: 404 });
     }
 
     const appointmentId = await nextBusinessId(db, "APT");
