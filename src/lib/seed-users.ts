@@ -1,5 +1,6 @@
 import type { Role } from "@/types/auth";
 import bcrypt from "bcryptjs";
+import { BCRYPT_COST } from "@/lib/password";
 
 export interface SeedUser {
   id: string;
@@ -67,7 +68,7 @@ let _hashedUsers: SeedUser[] | null = null;
 export async function getSeedUsers(): Promise<SeedUser[]> {
   if (_hashedUsers) return _hashedUsers;
 
-  const defaultPassword = await bcrypt.hash("medcore123", 10);
+  const defaultPassword = await bcrypt.hash("medcore123", BCRYPT_COST);
   _hashedUsers = SEED_USERS.map((u) => ({
     ...u,
     password: defaultPassword,

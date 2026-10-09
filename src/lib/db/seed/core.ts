@@ -6,6 +6,7 @@ import {
   users,
 } from "@/lib/db/schema";
 import bcrypt from "bcryptjs";
+import { BCRYPT_COST } from "@/lib/password";
 import {
   BLOOD_GROUPS,
   CLINICAL_DEPARTMENTS,
@@ -318,7 +319,7 @@ export async function seedCore(
   counts.departments = deptSeq;
 
   // --- Demo users --------------------------------------------------------
-  const hashedPassword = await bcrypt.hash(DEMO_PASSWORD, 10);
+  const hashedPassword = await bcrypt.hash(DEMO_PASSWORD, BCRYPT_COST);
   let userCount = 0;
   for (const user of DEMO_USERS) {
     const rows = await tx

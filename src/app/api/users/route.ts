@@ -7,6 +7,7 @@ import { createUserSchema } from "@/lib/validations/user";
 import { paginationSchema } from "@/lib/validations/common";
 import { recordAudit } from "@/lib/audit";
 import bcrypt from "bcryptjs";
+import { BCRYPT_COST } from "@/lib/password";
 
 export async function GET(request: NextRequest) {
   try {
@@ -144,7 +145,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, BCRYPT_COST);
 
     const [newUser] = await db
       .insert(users)
