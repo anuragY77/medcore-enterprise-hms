@@ -107,6 +107,57 @@ describe("seed guard", () => {
     }
   });
 
+  it("Phase 25: applies the same checks across case, whitespace and URL-encoding", () => {
+    // Case: markers and NODE_ENV are matched case-insensitively.
+    expect(() =>
+      assertSeedTarget({
+        databaseUrl: "postgresql://postgres:pw@localhost:5432/Medcore_PRODUCTION",
+        nodeName: "Development",
+        confirmed: true,
+      })
+    ).toThrow(/production-like/);
+    expect(() =>
+      assertSeedTarget({
+        databaseUrl: OK_URL,
+        nodeName: " PRODUCTION ",
+        confirmed: true,
+      })
+    ).toThrow(/NODE_ENV/);
+    // Whitespace: outer padding on the URL and on NODE_ENV does not bypass
+    // any check (trimmed before parsing/matching).
+    expect(
+      assertSeedTarget({
+        databaseUrl: `  ${OK_URL}  `,
+        nodeName: " development ",
+        confirmed: true,
+      })
+    ).toEqual({ host: "localhost", database: "medcore" });
+    expect(() =>
+      assertSeedTarget({
+        databaseUrl: `  ${OK_URL}  `,
+        nodeName: " production ",
+        confirmed: true,
+      })
+    ).toThrow(/NODE_ENV/);
+    // URL-encoding: percent-escapes are decoded BEFORE the marker check, so
+    // "prod%75ction" (= "production") cannot smuggle a production-like name.
+    expect(() =>
+      assertSeedTarget({
+        databaseUrl: "postgresql://postgres:pw@localhost:5432/prod%75ction",
+        nodeName: "development",
+        confirmed: true,
+      })
+    ).toThrow(/production-like/);
+    // An empty database name after decoding still fails closed.
+    expect(() =>
+      assertSeedTarget({
+        databaseUrl: "postgresql://postgres:pw@localhost:5432/",
+        nodeName: "development",
+        confirmed: true,
+      })
+    ).toThrow(/database name is empty/);
+  });
+
   it("refuses production or missing NODE_ENV", () => {
     for (const env of ["production", undefined, ""]) {
       expect(() =>
