@@ -208,13 +208,56 @@ describe("extractLoginEmail", () => {
 
     const blank = credentialsRequest({ email: "   " });
     await expect(extractLoginEmail(blank)).resolves.toBeNull();
+  });
 
+  it("parses the email from a JSON body (no content-type bypass)", async () => {
+    // Auth.js accepts application/json credentials callbacks. formData()
+    // throws on that content type, so the parser must fall back to JSON —
+    // otherwise a JSON login is keyed IP-only and skips the pair/account
+    // tiers (Phase 26 finding, demonstrated live before the fix).
     const json = new Request(CALLBACK_URL, {
       method: "POST",
-      body: JSON.stringify({ email: "a@b.c" }),
+      body: JSON.stringify({ email: "a@b.c", password: "x" }),
       headers: { "content-type": "application/json" },
     });
-    await expect(extractLoginEmail(json)).resolves.toBeNull();
+    await expect(extractLoginEmail(json)).resolves.toBe("a@b.c");
+  });
+
+  it("returns null for JSON bodies without a usable email", async () => {
+    const missing = new Request(CALLBACK_URL, {
+      method: "POST",
+      body: JSON.stringify({ password: "x" }),
+      headers: { "content-type": "application/json" },
+    });
+    await expect(extractLoginEmail(missing)).resolves.toBeNull();
+
+    const blank = new Request(CALLBACK_URL, {
+      method: "POST",
+      body: JSON.stringify({ email: "   " }),
+      headers: { "content-type": "application/json" },
+    });
+    await expect(extractLoginEmail(blank)).resolves.toBeNull();
+
+    const nonString = new Request(CALLBACK_URL, {
+      method: "POST",
+      body: JSON.stringify({ email: 42 }),
+      headers: { "content-type": "application/json" },
+    });
+    await expect(extractLoginEmail(nonString)).resolves.toBeNull();
+
+    const malformed = new Request(CALLBACK_URL, {
+      method: "POST",
+      body: "{not-json",
+      headers: { "content-type": "application/json" },
+    });
+    await expect(extractLoginEmail(malformed)).resolves.toBeNull();
+
+    const oversized = new Request(CALLBACK_URL, {
+      method: "POST",
+      body: JSON.stringify({ email: `${"a".repeat(300)}@evil.test` }),
+      headers: { "content-type": "application/json" },
+    });
+    await expect(extractLoginEmail(oversized)).resolves.toBeNull();
   });
 
   it("does not consume the request body (clone)", async () => {
@@ -288,6 +331,26 @@ describe("describeLoginAttempt", () => {
     expect(attempt!.email).toBeNull();
     expect(attempt!.entries.map((e) => e.key)).toEqual(["ip:192.0.2.10"]);
     expect(attempt!.keys).toBeNull();
+  });
+
+  it("keys a JSON-body attempt in all three tiers (no content-type bypass)", async () => {
+    // Phase 26 finding: application/json callbacks must not degrade to
+    // IP-only counting — that would let an attacker keep the pair tier at
+    // 5/15min and the account backstop at 30/15min by sending JSON bodies.
+    const attempt = await describeLoginAttempt(
+      new Request(CALLBACK_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-forwarded-for": "192.0.2.77" },
+        body: JSON.stringify({ email: "Victim@MedCore.com", password: "x" }),
+      })
+    );
+    expect(attempt!.email).toBe("Victim@MedCore.com");
+    expect(attempt!.ip).toBe("192.0.2.77");
+    expect(attempt!.entries.map((e) => e.key)).toEqual([
+      "pair:192.0.2.77|victim@medcore.com",
+      "ip:192.0.2.77",
+      "acct:victim@medcore.com",
+    ]);
   });
 });
 

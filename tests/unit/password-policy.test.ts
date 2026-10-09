@@ -68,6 +68,47 @@ describe("createUserSchema bcrypt 72-byte password limit (Phase 25 §4)", () => 
     const result = createUserSchema.safeParse(withPassword("\u4e2d".repeat(25)));
     expect(result.success).toBe(false);
   });
+
+  it("accepts a 71-byte ASCII password (just under the boundary)", () => {
+    expect(createUserSchema.safeParse(withPassword("a".repeat(71))).success).toBe(true);
+  });
+
+  it("accepts exactly 72 bytes of 4-byte UTF-8 (18 x emoji) and rejects 19 x (76 bytes)", () => {
+    expect(
+      createUserSchema.safeParse(withPassword("\u{1f600}".repeat(18))).success
+    ).toBe(true);
+    const over = createUserSchema.safeParse(withPassword("\u{1f600}".repeat(19)));
+    expect(over.success).toBe(false);
+    if (!over.success) {
+      expect(over.error.issues[0]?.message).toContain("72 bytes");
+    }
+  });
+
+  it("accepts a mixed-script password that lands exactly on 72 bytes", () => {
+    const mixed = "a".repeat(66) + "\u4e2d".repeat(2); // 66 + 2*3 = 72
+    expect(createUserSchema.safeParse(withPassword(mixed)).success).toBe(true);
+    const mixedOver = "a".repeat(67) + "\u4e2d".repeat(2); // 73
+    expect(createUserSchema.safeParse(withPassword(mixedOver)).success).toBe(false);
+  });
+
+  it("rejects an empty password", () => {
+    expect(createUserSchema.safeParse(withPassword("")).success).toBe(false);
+  });
+
+  it("preserves leading/trailing whitespace (no silent trim)", () => {
+    const spaced = "  abc123  ";
+    const result = createUserSchema.safeParse(withPassword(spaced));
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.password).toBe(spaced);
+    }
+  });
+
+  it("rejects non-string password values (malformed type never reaches bcrypt)", () => {
+    for (const bad of [42, null, undefined, ["secret"], { x: 1 }, true]) {
+      expect(createUserSchema.safeParse(withPassword(bad as never)).success).toBe(false);
+    }
+  });
 });
 
 describe("updateUserSchema password surface (Phase 25 §5 / §15)", () => {

@@ -304,17 +304,32 @@ export function extractClientIp(request: Request): string {
   return "unknown";
 }
 
+/**
+ * Shared validation for a candidate email from either body shape: must be a
+ * non-blank string short enough to fit the storage-safe key bound, else null
+ * (the attempt degrades to IP-only counting rather than risking a 22001).
+ */
+function sanitizeLoginEmail(value: unknown): string | null {
+  if (typeof value !== "string" || value.trim().length === 0) return null;
+  if (normalizeLoginIdentifier(value).length > MAX_EMAIL_KEY_LENGTH) {
+    return null;
+  }
+  return value;
+}
+
 export async function extractLoginEmail(request: Request): Promise<string | null> {
   try {
     const form = await request.clone().formData();
-    const email = form.get("email");
-    if (typeof email !== "string" || email.trim().length === 0) return null;
-    // Too long to build storage-safe keys: treat as unparseable so the
-    // attempt falls back to IP-only throttling (see MAX_EMAIL_KEY_LENGTH).
-    if (normalizeLoginIdentifier(email).length > MAX_EMAIL_KEY_LENGTH) {
-      return null;
-    }
-    return email;
+    return sanitizeLoginEmail(form.get("email"));
+  } catch {
+    // Not form-encoded. Auth.js also accepts application/json credentials
+    // callbacks, and formData() throws on them — falling through without a
+    // fallback would silently key those attempts IP-only, bypassing the
+    // pair and account tiers (Phase 26 finding). Parse JSON below instead.
+  }
+  try {
+    const data = (await request.clone().json()) as { email?: unknown } | null;
+    return sanitizeLoginEmail(data?.email);
   } catch {
     return null;
   }
