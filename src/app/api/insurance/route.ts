@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-    const [countResult, claimsList] = await Promise.all([
+    const [countResult, claimsList, statusRows] = await Promise.all([
       db
         .select({ count: sql<number>`count(*)` })
         .from(insuranceClaims)
@@ -98,9 +98,19 @@ export async function GET(request: NextRequest) {
         .orderBy(sql`${insuranceClaims.createdAt} DESC`)
         .limit(pageSize)
         .offset(offset),
+      db
+        .select({ status: insuranceClaims.status, count: sql<number>`count(*)` })
+        .from(insuranceClaims)
+        .where(whereClause)
+        .groupBy(insuranceClaims.status),
     ]);
 
     const total = Number(countResult[0]?.count ?? 0);
+
+    const statusCounts: Record<string, number> = {};
+    for (const row of statusRows) {
+      statusCounts[row.status] = Number(row.count);
+    }
 
     return NextResponse.json({
       data: claimsList,
@@ -109,6 +119,7 @@ export async function GET(request: NextRequest) {
         pageSize,
         total,
         totalPages: Math.ceil(total / pageSize),
+        statusCounts,
       },
     });
   } catch (error) {

@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-    const [countResult, invoicesList] = await Promise.all([
+    const [countResult, invoicesList, statusRows] = await Promise.all([
       db
         .select({ count: sql<number>`count(*)` })
         .from(invoices)
@@ -95,9 +95,19 @@ export async function GET(request: NextRequest) {
         .orderBy(sql`${invoices.createdAt} DESC`)
         .limit(pageSize)
         .offset(offset),
+      db
+        .select({ status: invoices.status, count: sql<number>`count(*)` })
+        .from(invoices)
+        .where(whereClause)
+        .groupBy(invoices.status),
     ]);
 
     const total = Number(countResult[0]?.count ?? 0);
+
+    const statusCounts: Record<string, number> = {};
+    for (const row of statusRows) {
+      statusCounts[row.status] = Number(row.count);
+    }
 
     return NextResponse.json({
       data: invoicesList,
@@ -106,6 +116,7 @@ export async function GET(request: NextRequest) {
         pageSize,
         total,
         totalPages: Math.ceil(total / pageSize),
+        statusCounts,
       },
     });
   } catch (error) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { and, eq, or, ilike, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
+import { recordAudit } from "@/lib/audit";
 import { hasPermission } from "@/types/auth";
 import { db, inventoryItems } from "@/lib/db";
 import { nextBusinessId } from "@/lib/business-id";
@@ -70,7 +71,7 @@ export async function GET(request: NextRequest) {
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-    const [countResult, itemsList] = await Promise.all([
+    const [countResult, itemsList, statusRows, stockRows] = await Promise.all([
       db
         .select({ count: sql<number>`count(*)` })
         .from(inventoryItems)
@@ -82,9 +83,34 @@ export async function GET(request: NextRequest) {
         .orderBy(sql`${inventoryItems.createdAt} DESC`)
         .limit(pageSize)
         .offset(offset),
+      db
+        .select({ status: inventoryItems.status, count: sql<number>`count(*)` })
+        .from(inventoryItems)
+        .where(whereClause)
+        .groupBy(inventoryItems.status),
+      db
+        .select({
+          inStock: sql<number>`count(*) filter (where ${inventoryItems.quantity} > 0 and (${inventoryItems.reorderLevel} is null or ${inventoryItems.quantity} > ${inventoryItems.reorderLevel}))`,
+          lowStock: sql<number>`count(*) filter (where ${inventoryItems.reorderLevel} is not null and ${inventoryItems.quantity} <= ${inventoryItems.reorderLevel} and ${inventoryItems.quantity} > 0)`,
+          outOfStock: sql<number>`count(*) filter (where ${inventoryItems.quantity} = 0)`,
+        })
+        .from(inventoryItems)
+        .where(whereClause),
     ]);
 
     const total = Number(countResult[0]?.count ?? 0);
+
+    const statusCounts: Record<string, number> = {};
+    for (const row of statusRows) {
+      statusCounts[row.status] = Number(row.count);
+    }
+
+    const stockRow = stockRows[0];
+    const stock = {
+      inStock: Number(stockRow?.inStock ?? 0),
+      lowStock: Number(stockRow?.lowStock ?? 0),
+      outOfStock: Number(stockRow?.outOfStock ?? 0),
+    };
 
     return NextResponse.json({
       data: itemsList,
@@ -93,6 +119,8 @@ export async function GET(request: NextRequest) {
         pageSize,
         total,
         totalPages: Math.ceil(total / pageSize),
+        statusCounts,
+        stock,
       },
     });
   } catch (error) {
@@ -149,6 +177,16 @@ export async function POST(request: NextRequest) {
       })
       .returning();
 
+    await recordAudit({
+      actorId: session.user.id,
+      action: "inventory.item.create",
+      entityType: "inventory_item",
+      entityId: newItem.id,
+      severity: "INFO",
+      category: "inventory",
+      success: true,
+      metadata: { itemId: newItem.itemId },
+    });
     return NextResponse.json(newItem, { status: 201 });
   } catch (error) {
     console.error("Failed to create inventory item:", error);

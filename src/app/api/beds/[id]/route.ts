@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
+import { recordAudit } from "@/lib/audit";
 import { hasPermission } from "@/types/auth";
 import { db, beds, patients } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
@@ -157,6 +158,16 @@ export async function PUT(
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
 
+    await recordAudit({
+      actorId: session.user.id,
+      action: "bed.update",
+      entityType: "bed",
+      entityId: result.bed.id,
+      severity: "INFO",
+      category: "beds",
+      success: true,
+      metadata: { bedId: result.bed.bedId, status: result.bed.status },
+    });
     return NextResponse.json(result.bed);
   } catch (error) {
     console.error("Failed to update bed:", error);

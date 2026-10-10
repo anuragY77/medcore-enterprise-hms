@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq, or, ilike, sql } from "drizzle-orm";
+import { and, eq, or, ilike, isNotNull, lte, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
+import { recordAudit } from "@/lib/audit";
 import { hasPermission } from "@/types/auth";
 import { db, pharmacyMedicines } from "@/lib/db";
 import { nextBusinessId } from "@/lib/business-id";
@@ -60,7 +61,14 @@ export async function GET(request: NextRequest) {
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-    const [countResult, medicinesList] = await Promise.all([
+    // Mirrors the client's low-stock filter: reorder level set and stock at/below it.
+    const lowStockClause = and(
+      whereClause,
+      isNotNull(pharmacyMedicines.reorderLevel),
+      lte(pharmacyMedicines.stockQuantity, pharmacyMedicines.reorderLevel)
+    );
+
+    const [countResult, medicinesList, statusCountRows, lowStockResult] = await Promise.all([
       db
         .select({ count: sql<number>`count(*)` })
         .from(pharmacyMedicines)
@@ -72,9 +80,24 @@ export async function GET(request: NextRequest) {
         .orderBy(sql`${pharmacyMedicines.createdAt} DESC`)
         .limit(pageSize)
         .offset(offset),
+      db
+        .select({ status: pharmacyMedicines.status, count: sql<number>`count(*)` })
+        .from(pharmacyMedicines)
+        .where(whereClause)
+        .groupBy(pharmacyMedicines.status),
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(pharmacyMedicines)
+        .where(lowStockClause),
     ]);
 
     const total = Number(countResult[0]?.count ?? 0);
+
+    const statusCounts: Record<string, number> = {};
+    for (const row of statusCountRows) {
+      statusCounts[row.status] = Number(row.count ?? 0);
+    }
+    const lowStockCount = Number(lowStockResult[0]?.count ?? 0);
 
     return NextResponse.json({
       data: medicinesList,
@@ -83,6 +106,8 @@ export async function GET(request: NextRequest) {
         pageSize,
         total,
         totalPages: Math.ceil(total / pageSize),
+        statusCounts,
+        lowStockCount,
       },
     });
   } catch (error) {
@@ -140,6 +165,16 @@ export async function POST(request: NextRequest) {
       })
       .returning();
 
+    await recordAudit({
+      actorId: session.user.id,
+      action: "pharmacy.medicine.create",
+      entityType: "medicine",
+      entityId: newMedicine.id,
+      severity: "INFO",
+      category: "pharmacy",
+      success: true,
+      metadata: { medicineId: newMedicine.medicineId },
+    });
     return NextResponse.json(newMedicine, { status: 201 });
   } catch (error) {
     console.error("Failed to create pharmacy medicine:", error);

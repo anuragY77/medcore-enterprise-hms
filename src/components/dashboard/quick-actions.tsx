@@ -21,7 +21,7 @@ const QUICK_ACTIONS: QuickAction[] = [
   },
   {
     label: "New Appointment",
-    href: "/appointments",
+    href: "/appointments/new",
     icon: CalendarDays,
     permission: "appointments:write",
   },

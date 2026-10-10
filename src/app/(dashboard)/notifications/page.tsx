@@ -15,6 +15,7 @@ import {
 import { hasPermission, type Role } from "@/types/auth";
 
 const EMPTY_META: NotificationsMeta = { page: 1, pageSize: 20, total: 0, totalPages: 0 };
+const SEARCH_DEBOUNCE_MS = 300;
 
 export default function NotificationsPage() {
   const { data: session, status } = useSession();
@@ -25,6 +26,7 @@ export default function NotificationsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
+  const [query, setQuery] = useState("");
   const [read, setRead] = useState("");
   const [type, setType] = useState("");
   const [page, setPage] = useState(1);
@@ -35,9 +37,20 @@ export default function NotificationsPage() {
   const role = session?.user?.role as Role | undefined;
   const canRead = role ? hasPermission(role, "notifications:read") : false;
 
+  useEffect(() => {
+    if (search.trim() === query) return;
+    const timer = setTimeout(() => {
+      setLoading(true);
+      setQuery(search.trim());
+      setPage(1);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [search, query]);
+
   const fetchNotifications = useCallback(async () => {
     try {
       const params = new URLSearchParams();
+      if (query) params.set("search", query);
       if (read) params.set("read", read);
       if (type) params.set("type", type);
       params.set("page", String(page));
@@ -74,7 +87,7 @@ export default function NotificationsPage() {
     } finally {
       setLoading(false);
     }
-  }, [read, type, page]);
+  }, [read, type, page, query]);
 
   useEffect(() => {
     if (status === "loading") return;
@@ -83,6 +96,7 @@ export default function NotificationsPage() {
       try {
         setLoading(true);
         const params = new URLSearchParams();
+        if (query) params.set("search", query);
         if (read) params.set("read", read);
         if (type) params.set("type", type);
         params.set("page", String(page));
@@ -121,7 +135,7 @@ export default function NotificationsPage() {
       }
     };
     load();
-  }, [status, session, canRead, read, type, page]);
+  }, [status, session, canRead, read, type, page, query]);
 
   const handleReadChange = (value: string) => {
     setLoading(true);
@@ -190,7 +204,7 @@ export default function NotificationsPage() {
 
   const showAuthLoading = status === "loading";
   const showDenied = !showAuthLoading && (!session || !canRead);
-  const hasFilters = Boolean(search.trim() || read || type);
+  const hasFilters = Boolean(query || read || type);
 
   if (showAuthLoading) {
     return (
@@ -275,7 +289,6 @@ export default function NotificationsPage() {
           {!loading && !error && (
             <NotificationList
               notifications={notifications}
-              search={search}
               hasFilters={hasFilters}
               meta={meta}
               markingId={markingId}

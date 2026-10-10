@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
+import { recordAudit } from "@/lib/audit";
 import { hasPermission } from "@/types/auth";
 import { db, inventoryItems } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
@@ -121,6 +122,16 @@ export async function PUT(
       .where(eq(inventoryItems.id, id))
       .returning();
 
+    await recordAudit({
+      actorId: session.user.id,
+      action: "inventory.item.update",
+      entityType: "inventory_item",
+      entityId: updatedItem.id,
+      severity: "INFO",
+      category: "inventory",
+      success: true,
+      metadata: { itemId: updatedItem.itemId },
+    });
     return NextResponse.json(updatedItem);
   } catch (error) {
     console.error("Failed to update inventory item:", error);

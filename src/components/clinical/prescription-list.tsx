@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Pill, User } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface Prescription {
@@ -27,30 +28,60 @@ interface PrescriptionListProps {
 export function PrescriptionList({ patientId, statusFilter = "All" }: PrescriptionListProps) {
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     async function fetchPrescriptions() {
+      setError(null);
+      setLoading(true);
       try {
         const params = statusFilter !== "All" ? `?status=${statusFilter}` : "";
         const res = await fetch(`/api/patients/${patientId}/prescriptions${params}`);
-        if (res.ok) {
-          const data = await res.json();
-          setPrescriptions(data.data);
+        if (!res.ok) {
+          throw new Error(
+            res.status === 401 || res.status === 403
+              ? "You do not have permission to view prescriptions."
+              : "Failed to load prescriptions."
+          );
         }
+        const data = await res.json();
+        setPrescriptions(Array.isArray(data.data) ? data.data : []);
       } catch (error) {
         console.error("Failed to fetch prescriptions:", error);
+        setError(
+          error instanceof Error ? error.message : "Failed to load prescriptions."
+        );
+        setPrescriptions([]);
       } finally {
         setLoading(false);
       }
     }
     fetchPrescriptions();
-  }, [patientId, statusFilter]);
+  }, [patientId, statusFilter, attempt]);
 
   if (loading) {
     return (
       <Card>
         <CardContent className="py-8 text-center text-slate-500">
           Loading prescriptions...
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center space-y-3">
+          <p className="text-sm text-red-600">{error}</p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAttempt((value) => value + 1)}
+          >
+            Try again
+          </Button>
         </CardContent>
       </Card>
     );
