@@ -34,6 +34,14 @@ yarn-error.log*
 .env*
 !.env.example
 
+# database backup artifacts (README "Backup & restore runbook" output)
+# — dumps contain every row of the database and must never be committed.
+# Drizzle migration .sql files under drizzle/migrations stay tracked on
+# purpose; only compressed/dump formats are ignored here.
+*.dump
+*.sql.gz
+*.backup
+
 # vercel
 .vercel
 
