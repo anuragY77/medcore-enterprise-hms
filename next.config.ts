@@ -17,12 +17,18 @@ import type { NextConfig } from "next";
 //   them. Phase 22 live probe demonstrated the header was absent — no-store
 //   forbids any storage beyond the browser's own memory.
 //
-// Deliberately NOT set here (documented in the Phase 21/24/28 reports):
-// - CSP nonce pipeline: a nonce forces every page to dynamic rendering (the
-//   app's dashboard pages are build-time prerendered shells behind the proxy
-//   auth gate), and framework inline scripts are reported to ignore the
-//   request nonce on the Next 16.2.x line (vercel/next.js#95433, auto-closed
-//   without a fix), which would break hydration under enforcement.
+// Deliberately NOT set here (documented in the Phase 21/24/28/29 reports):
+// - CSP nonce pipeline: nonce-based CSP requires per-request HTML — every
+//   route in this app is build-time prerendered (static shells behind the
+//   proxy auth gate), which Next documents as incompatible with nonces;
+//   maintainers closed vercel/next.js#95433 and #96063 as expected behavior
+//   for static routes ("its HTML is generated before the per-request nonce
+//   exists"). The framework-side blocker — boundary (loading/template/error)
+//   chunk tags emitted without the nonce — was fixed upstream in
+//   vercel/next.js#98398 (merged 2026-09-09, backported to the 16.3.x line;
+//   `nonce: ctx.nonce` verified present in the installed 16.3.8 compiled
+//   runtime). One blocker remains: converting the static shells to dynamic
+//   rendering — an architectural decision, not a framework bug.
 // - Phase 28 hardened the CSP from the safe subset to a restrictive default:
 //   `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src
 //   'self' 'unsafe-inline'` plus the existing safe subset. This is strictly
@@ -41,8 +47,11 @@ import type { NextConfig } from "next";
 //   `z.config({ jitless: true })` and is the first import of the root
 //   layout and of every src/lib/validations module, so the probe is never
 //   attempted. Dev adds ws:/wss: to connect-src so the HMR socket
-//   survives default-src. A nonce remains the endgame once the two
-//   blockers above clear.
+//   survives default-src. Phase 29 re-verified the policy is emitted
+//   exactly once with identical bytes on every route class (pages,
+//   redirects, APIs, 404s, static assets — 76/76 raw-header checks). A
+//   nonce remains the endgame once prerendered shells give way to dynamic
+//   rendering (the only remaining blocker above).
 // - HSTS: the app is served over plain HTTP on localhost in dev/staging and
 //   this config is shared across environments; enabling it locally would
 //   pin browsers to HTTPS for localhost. Tracked for TLS termination
