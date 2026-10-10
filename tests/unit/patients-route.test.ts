@@ -9,6 +9,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const dbCtl = vi.hoisted(() => ({
+  // Phase 28: the reference validation issues its departments/staff selects
+  // before the insert; queue each result in call order (empty queue falls
+  // back to selectRows for the older assertions).
+  queue: [] as unknown[],
   selectRows: [] as unknown[],
   insertValues: [] as unknown[],
   updateValues: [] as unknown[],
@@ -62,10 +66,15 @@ vi.mock("@/lib/db", () => {
 
   return {
     db: {
-      select: () => makeChain(dbCtl.selectRows),
+      select: () =>
+        makeChain(
+          dbCtl.queue.length > 0 ? dbCtl.queue.shift() : dbCtl.selectRows
+        ),
       insert: () => makeChain([dbCtl.insertRow]),
       update: () => makeChain([dbCtl.updateRow]),
     },
+    departments: tableStub(),
+    staff: tableStub(),
     patients: tableStub(),
     patientAllergies: tableStub(),
     patientConditions: tableStub(),
@@ -156,6 +165,7 @@ const VALID_BODY = {
 describe("POST /api/patients applies the full schema (Phase 21)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    dbCtl.queue = [];
     dbCtl.selectRows = [];
     dbCtl.insertValues = [];
     dbCtl.updateValues = [];
@@ -224,6 +234,11 @@ describe("POST /api/patients applies the full schema (Phase 21)", () => {
   });
 
   it("accepts a conforming payload, defaults status, and allocates a business id", async () => {
+    // Reference validation queries departments, then active clinical staff.
+    dbCtl.queue = [
+      [{ name: "Cardiology" }],
+      [{ firstName: "Chidi", lastName: "Eze" }],
+    ];
     const res = await callJson(postPatient, {
       url: "http://localhost:3000/api/patients",
       method: "POST",
@@ -233,6 +248,46 @@ describe("POST /api/patients applies the full schema (Phase 21)", () => {
     expect(businessIdMock).toHaveBeenCalledWith(expect.anything(), "PT");
     const values = dbCtl.insertValues[0] as { status: string };
     expect(values.status).toBe("Active");
+  });
+
+  it("rejects a department absent from reference data without inserting (Phase 28)", async () => {
+    dbCtl.queue = [
+      [{ name: "Cardiology" }],
+      [{ firstName: "Chidi", lastName: "Eze" }],
+    ];
+    const res = await callJson(postPatient, {
+      url: "http://localhost:3000/api/patients",
+      method: "POST",
+      body: { ...VALID_BODY, department: "Dermatology" },
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as {
+      details?: Record<string, string[] | undefined>;
+    };
+    expect(body.details?.department).toEqual(["Department does not exist"]);
+    expect(dbCtl.insertValues).toHaveLength(0);
+    expect(businessIdMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects an attending doctor absent from reference data without inserting (Phase 28)", async () => {
+    dbCtl.queue = [
+      [{ name: "Cardiology" }],
+      [{ firstName: "Chidi", lastName: "Eze" }],
+    ];
+    const res = await callJson(postPatient, {
+      url: "http://localhost:3000/api/patients",
+      method: "POST",
+      body: { ...VALID_BODY, attendingDoctor: "Dr. Michael Chen" },
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as {
+      details?: Record<string, string[] | undefined>;
+    };
+    expect(body.details?.attendingDoctor).toEqual([
+      "Attending doctor does not exist",
+    ]);
+    expect(dbCtl.insertValues).toHaveLength(0);
+    expect(businessIdMock).not.toHaveBeenCalled();
   });
 
   it("returns 401 without a session", async () => {

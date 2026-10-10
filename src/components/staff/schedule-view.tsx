@@ -138,7 +138,7 @@ export function ScheduleView({ doctorName }: ScheduleViewProps) {
                 </span>
                 {slots.length === 0 ? (
                   <span className="text-xs text-muted-foreground italic">
-                    No shifts
+                    No appointments
                   </span>
                 ) : (
                   <div className="flex flex-wrap gap-2">

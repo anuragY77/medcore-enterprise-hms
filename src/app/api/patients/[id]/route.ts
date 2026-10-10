@@ -7,6 +7,7 @@ import { idParamSchema } from "@/lib/validations/common";
 import { updatePatientSchema } from "@/lib/validations/patient";
 import { recordAudit } from "@/lib/audit";
 import { resolveUsersByDepartmentRole, recordNotifications } from "@/lib/notifications";
+import { validatePatientReference } from "@/lib/reference";
 
 export async function GET(
   request: NextRequest,
@@ -127,6 +128,20 @@ export async function PUT(
     // input omitted it. The gate above rejected explicit status, so strip the
     // fabricated one — profile updates must never write the workflow column.
     delete rest.status;
+
+    // Phase 28: validate reference-backed fields when the partial body
+    // includes them (undefined fields are skipped, so phone-only updates do
+    // not query the reference tables).
+    const referenceErrors = await validatePatientReference({
+      department: rest.department,
+      attendingDoctor: rest.attendingDoctor,
+    });
+    if (referenceErrors) {
+      return NextResponse.json(
+        { error: "Validation failed", details: referenceErrors },
+        { status: 400 }
+      );
+    }
 
     const [updatedPatient] = await db
       .update(patients)
