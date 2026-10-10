@@ -7,6 +7,7 @@ import { paginationSchema } from "@/lib/validations/common";
 import { patientSchema } from "@/lib/validations/patient";
 import { recordAudit } from "@/lib/audit";
 import { nextBusinessId } from "@/lib/business-id";
+import { validatePatientReference } from "@/lib/reference";
 
 export async function GET(request: NextRequest) {
   try {
@@ -122,6 +123,20 @@ export async function POST(request: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json(
         { error: "Validation failed", details: parsed.error.flatten().fieldErrors },
+        { status: 400 }
+      );
+    }
+
+    // Phase 28: department and attending doctor come from authoritative
+    // reference data (GET /api/reference), not free text — the registration
+    // form's hard-coded dropdowns offered values absent from this hospital.
+    const referenceErrors = await validatePatientReference({
+      department: parsed.data.department,
+      attendingDoctor: parsed.data.attendingDoctor,
+    });
+    if (referenceErrors) {
+      return NextResponse.json(
+        { error: "Validation failed", details: referenceErrors },
         { status: 400 }
       );
     }

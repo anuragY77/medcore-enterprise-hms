@@ -1,3 +1,5 @@
+import "@/lib/zod-csp";
+
 import { z } from "zod";
 import { optionalDateFieldSchema } from "./common";
 

@@ -1,40 +1,15 @@
 "use client";
 
-import { cloneElement, isValidElement, useId, useState } from "react";
+import { cloneElement, isValidElement, useEffect, useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { UserPlus, ArrowLeft, Save } from "lucide-react";
+import { UserPlus, ArrowLeft, RefreshCw, Save } from "lucide-react";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
 import { patientSchema, type PatientFormData } from "@/lib/validations/patient";
 import { cn } from "@/lib/utils";
 
-const DEPARTMENTS = [
-  "Cardiology",
-  "Dermatology",
-  "Emergency",
-  "General Surgery",
-  "Internal Medicine",
-  "Neurology",
-  "Obstetrics",
-  "Oncology",
-  "Orthopedics",
-  "Pediatrics",
-];
-
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
-
-const DOCTORS = [
-  "Dr. Michael Chen",
-  "Dr. Emily Watson",
-  "Dr. David Kim",
-  "Dr. Lisa Park",
-  "Dr. Susan Lee",
-  "Dr. Thomas Brown",
-  "Dr. Rachel Green",
-  "Dr. James Wilson",
-  "Dr. Sarah Connor",
-];
 
 function FormField({
   label,
@@ -74,6 +49,54 @@ export default function NewPatientPage() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [departments, setDepartments] = useState<string[]>([]);
+  const [doctors, setDoctors] = useState<string[]>([]);
+  const [referenceLoading, setReferenceLoading] = useState(true);
+  const [referenceError, setReferenceError] = useState(false);
+  const [referenceRetry, setReferenceRetry] = useState(0);
+
+  // Phase 28: dropdown options come from the authoritative reference endpoint
+  // instead of a hard-coded list that offered departments absent from this
+  // hospital. Same async load() pattern as the list pages (no setState in
+  // the effect body itself).
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setReferenceLoading(true);
+      setReferenceError(false);
+      try {
+        const res = await fetch("/api/reference");
+        if (res.status === 401) {
+          router.push("/login?callbackUrl=/patients/new");
+          return;
+        }
+        if (!res.ok) {
+          throw new Error("reference load failed");
+        }
+        const data = (await res.json()) as {
+          departments?: string[];
+          doctors?: string[];
+        };
+        if (cancelled) return;
+        setDepartments(Array.isArray(data.departments) ? data.departments : []);
+        setDoctors(Array.isArray(data.doctors) ? data.doctors : []);
+      } catch {
+        if (!cancelled) {
+          setReferenceError(true);
+        }
+      } finally {
+        if (!cancelled) {
+          setReferenceLoading(false);
+        }
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [router, referenceRetry]);
 
   const {
     register,
@@ -175,6 +198,25 @@ export default function NewPatientPage() {
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        {referenceError && (
+          <div
+            role="alert"
+            className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-md text-sm flex items-center justify-between gap-3"
+          >
+            <span>
+              Failed to load departments and doctors. Registration is disabled
+              until the reference data loads.
+            </span>
+            <button
+              type="button"
+              onClick={() => setReferenceRetry((n) => n + 1)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-md transition-colors shrink-0"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Retry
+            </button>
+          </div>
+        )}
         {serverError && (
           <div
             role="alert"
@@ -274,10 +316,13 @@ export default function NewPatientPage() {
             <FormField label="Department" error={errors.department?.message} required>
               <select
                 {...register("department")}
+                disabled={referenceLoading}
                 className={cn(inputClasses, errors.department && "border-destructive")}
               >
-                <option value="">Select department</option>
-                {DEPARTMENTS.map((dept) => (
+                <option value="">
+                  {referenceLoading ? "Loading departments..." : "Select department"}
+                </option>
+                {departments.map((dept) => (
                   <option key={dept} value={dept}>
                     {dept}
                   </option>
@@ -288,10 +333,13 @@ export default function NewPatientPage() {
             <FormField label="Attending Doctor" error={errors.attendingDoctor?.message} required>
               <select
                 {...register("attendingDoctor")}
+                disabled={referenceLoading}
                 className={cn(inputClasses, errors.attendingDoctor && "border-destructive")}
               >
-                <option value="">Select doctor</option>
-                {DOCTORS.map((doc) => (
+                <option value="">
+                  {referenceLoading ? "Loading doctors..." : "Select doctor"}
+                </option>
+                {doctors.map((doc) => (
                   <option key={doc} value={doc}>
                     {doc}
                   </option>
@@ -369,7 +417,7 @@ export default function NewPatientPage() {
           </button>
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || referenceLoading || referenceError}
             className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Save className="h-4 w-4" />

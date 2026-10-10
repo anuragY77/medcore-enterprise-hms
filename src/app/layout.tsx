@@ -1,3 +1,6 @@
+// Phase 28: must precede every other import (incl. next-auth client) so Zod's
+// eval-based JIT probe is skipped under the no-unsafe-eval CSP.
+import "@/lib/zod-csp";
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans, Inter } from "next/font/google";
 import { AuthProvider } from "@/components/auth-provider";

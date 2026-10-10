@@ -63,6 +63,8 @@ vi.mock("@/lib/db", () => {
       insert: () => makeChain([dbCtl.insertRow]),
       update: () => makeChain([dbCtl.updateRow]),
     },
+    departments: tableStub(),
+    staff: tableStub(),
     patients: tableStub(),
     users: tableStub(),
     appointments: tableStub(),

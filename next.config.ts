@@ -17,23 +17,55 @@ import type { NextConfig } from "next";
 //   them. Phase 22 live probe demonstrated the header was absent — no-store
 //   forbids any storage beyond the browser's own memory.
 //
-// Deliberately NOT set here (documented in the Phase 21/24 reports):
-// - CSP script-src/default-src (see Phase 24 note below).
-// - Phase 24 CSP (safe subset): frame-ancestors/object-src/base-uri/
-//   form-action are enforced now — they never touch script/style loading,
-//   so they cannot break the Next.js inline bootstrap. script-src and
-//   default-src are deliberately omitted: a nonce pipeline would force every
-//   page to dynamic rendering (the app's dashboard pages are build-time
-//   prerendered shells behind the proxy auth gate), and framework inline
-//   scripts are reported to ignore the request nonce on the Next 16.2.x line
-//   (vercel/next.js#95433, auto-closed without a fix), which would break
-//   hydration under enforcement. Revisit after those two blockers clear.
+// Deliberately NOT set here (documented in the Phase 21/24/28 reports):
+// - CSP nonce pipeline: a nonce forces every page to dynamic rendering (the
+//   app's dashboard pages are build-time prerendered shells behind the proxy
+//   auth gate), and framework inline scripts are reported to ignore the
+//   request nonce on the Next 16.2.x line (vercel/next.js#95433, auto-closed
+//   without a fix), which would break hydration under enforcement.
+// - Phase 28 hardened the CSP from the safe subset to a restrictive default:
+//   `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src
+//   'self' 'unsafe-inline'` plus the existing safe subset. This is strictly
+//   stronger than the Phase 24 policy (which left script/style/anything
+//   unlisted open to ANY origin): 'unsafe-inline' keeps Next's inline
+//   bootstrap hydrating while script-src still blocks cross-origin script
+//   loads and blocks eval/new Function (no 'unsafe-eval'); style-src blocks
+//   cross-origin stylesheets; default-src confines images/fonts/connect/
+//   media/workers to same-origin (the app renders no <img>, self-hosts its
+//   fonts via next/font, and makes only same-origin fetches — verified
+//   against the built app with a browser console + securitypolicyviolation
+//   listener across auth/dashboard/clinical/workflow pages, zero
+//   violations). Zod v4's eval-based JIT probe would otherwise trip the
+//   no-unsafe-eval rule on every page (a caught, swallowed, but still
+//   reported securitypolicyviolation): src/lib/zod-csp.ts sets
+//   `z.config({ jitless: true })` and is the first import of the root
+//   layout and of every src/lib/validations module, so the probe is never
+//   attempted. Dev adds ws:/wss: to connect-src so the HMR socket
+//   survives default-src. A nonce remains the endgame once the two
+//   blockers above clear.
 // - HSTS: the app is served over plain HTTP on localhost in dev/staging and
 //   this config is shared across environments; enabling it locally would
-//   pin browsers to HTTPS for localhost. Tracked for TLS termination.
+//   pin browsers to HTTPS for localhost. Tracked for TLS termination
+//   (README "Security & Hardening" carries the exact header to set at the
+//   reverse proxy).
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   async headers() {
+    const connectSrc =
+      process.env.NODE_ENV === "production"
+        ? "connect-src 'self'"
+        : "connect-src 'self' ws: wss:";
+    const csp = [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline'",
+      connectSrc,
+      "frame-ancestors 'none'",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+    ].join("; ");
+
     return [
       {
         source: "/(.*)",
@@ -46,11 +78,7 @@ const nextConfig: NextConfig = {
             value: "camera=(), microphone=(), geolocation=()",
           },
           { key: "X-XSS-Protection", value: "0" },
-          {
-            key: "Content-Security-Policy",
-            value:
-              "frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'",
-          },
+          { key: "Content-Security-Policy", value: csp },
         ],
       },
       {
