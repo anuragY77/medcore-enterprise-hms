@@ -38,6 +38,7 @@ function PatientsView({ search }: { search: string }) {
 
   const role = session?.user?.role as Role | undefined;
   const canRead = role ? hasPermission(role, "patients:read") : false;
+  const canWrite = role ? hasPermission(role, "patients:write") : false;
 
   useEffect(() => {
     if (searchInput === query) return;
@@ -142,7 +143,7 @@ function PatientsView({ search }: { search: string }) {
             Manage patient registry, search, and profiles
           </p>
         </div>
-        {canRead && !showDenied && (
+        {canWrite && !showDenied && (
           <button
             onClick={() => router.push("/patients/new")}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors shadow-sm"

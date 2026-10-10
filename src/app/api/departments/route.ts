@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { and, eq, or, ilike, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
+import { recordAudit } from "@/lib/audit";
 import { hasPermission } from "@/types/auth";
 import { db, departments } from "@/lib/db";
 import { nextBusinessId } from "@/lib/business-id";
@@ -128,6 +129,16 @@ export async function POST(request: NextRequest) {
       })
       .returning();
 
+    await recordAudit({
+      actorId: session.user.id,
+      action: "department.create",
+      entityType: "department",
+      entityId: newDepartment.id,
+      severity: "INFO",
+      category: "departments",
+      success: true,
+      metadata: { departmentId: newDepartment.departmentId },
+    });
     return NextResponse.json(newDepartment, { status: 201 });
   } catch (error) {
     console.error("Failed to create department:", error);

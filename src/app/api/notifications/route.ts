@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, or, sql, type SQL } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
 import { db, notifications, users } from "@/lib/db";
@@ -32,10 +32,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { read, type, page, pageSize } = parsed.data;
+    const { read, type, search, page, pageSize } = parsed.data;
     const offset = (page - 1) * pageSize;
 
-    const conditions = [eq(notifications.recipientId, session.user.id)];
+    const conditions: (SQL | undefined)[] = [
+      eq(notifications.recipientId, session.user.id),
+    ];
 
     if (read !== undefined) {
       conditions.push(eq(notifications.isRead, read === "true"));
@@ -43,6 +45,14 @@ export async function GET(request: NextRequest) {
 
     if (type) {
       conditions.push(eq(notifications.type, type));
+    }
+
+    const searchTerm = search?.trim();
+    if (searchTerm) {
+      const term = `%${searchTerm}%`;
+      conditions.push(
+        or(ilike(notifications.title, term), ilike(notifications.message, term))
+      );
     }
 
     const whereClause = and(...conditions);

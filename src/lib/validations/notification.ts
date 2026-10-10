@@ -18,6 +18,7 @@ export const notificationListQuerySchema = z.object({
     .default(20),
   read: z.enum(["true", "false"], { message: "Invalid read value" }).optional(),
   type: z.enum(NOTIFICATION_TYPES, { message: "Invalid notification type" }).optional(),
+  search: z.string().max(200, "Search must be at most 200 characters").optional(),
 });
 
 export type NotificationListQuery = z.infer<typeof notificationListQuerySchema>;

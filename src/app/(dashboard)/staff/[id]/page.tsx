@@ -80,43 +80,22 @@ export default function StaffProfilePage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <StaffCard
-            staffId={staff.staffId}
-            firstName={staff.firstName}
-            lastName={staff.lastName}
-            role={staff.role}
-            department={staff.department}
-            specialization={staff.specialization}
-            email={staff.email}
-            phone={staff.phone}
-            qualification={staff.qualification}
-            experience={staff.experience}
-            status={staff.status}
-            joiningDate={staff.joiningDate}
-          />
-          <ScheduleView staffId={staff.id} />
-        </div>
-
-        <div className="space-y-6">
-          <div className="bg-card rounded-lg border border-border/50 shadow-sm p-5">
-            <h3 className="text-sm font-semibold text-foreground font-headline mb-3">
-              Quick Actions
-            </h3>
-            <div className="space-y-2">
-              <button className="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-muted/50 transition-colors">
-                Edit Profile
-              </button>
-              <button className="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-muted/50 transition-colors">
-                View Schedule
-              </button>
-              <button className="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-muted/50 transition-colors text-destructive">
-                Deactivate Staff
-              </button>
-            </div>
-          </div>
-        </div>
+      <div className="space-y-6">
+        <StaffCard
+          staffId={staff.staffId}
+          firstName={staff.firstName}
+          lastName={staff.lastName}
+          role={staff.role}
+          department={staff.department}
+          specialization={staff.specialization}
+          email={staff.email}
+          phone={staff.phone}
+          qualification={staff.qualification}
+          experience={staff.experience}
+          status={staff.status}
+          joiningDate={staff.joiningDate}
+        />
+        <ScheduleView doctorName={`Dr. ${staff.firstName} ${staff.lastName}`} />
       </div>
     </div>
   );

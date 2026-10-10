@@ -101,7 +101,7 @@ export async function verifyCredentials(credentials: unknown): Promise<{
   }
 
   if (!VALID_ROLES.has(user.role)) {
-    console.error(`Invalid role "${user.role}" for user ${user.email}`);
+    console.error(`Invalid role "${user.role}" for user ${user.id}`);
     await recordAudit({
       actorId: user.id,
       action: "auth.login",

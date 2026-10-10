@@ -87,11 +87,16 @@ export async function GET(request: NextRequest) {
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-    const [countResult, testsList] = await Promise.all([
+    const [countResult, statusCountsList, testsList] = await Promise.all([
       db
         .select({ count: sql<number>`count(*)` })
         .from(labTests)
         .where(whereClause),
+      db
+        .select({ status: labTests.status, count: sql<number>`count(*)` })
+        .from(labTests)
+        .where(whereClause)
+        .groupBy(labTests.status),
       db
         .select()
         .from(labTests)
@@ -103,6 +108,13 @@ export async function GET(request: NextRequest) {
 
     const total = Number(countResult[0]?.count ?? 0);
 
+    // Per-status totals over the same filter as the list, so the KPI cards
+    // reflect the whole result set instead of the current page slice.
+    const statusCounts: Record<string, number> = {};
+    for (const row of statusCountsList) {
+      statusCounts[row.status] = Number(row.count);
+    }
+
     return NextResponse.json({
       data: testsList,
       meta: {
@@ -110,6 +122,7 @@ export async function GET(request: NextRequest) {
         pageSize,
         total,
         totalPages: Math.ceil(total / pageSize),
+        statusCounts,
       },
     });
   } catch (error) {

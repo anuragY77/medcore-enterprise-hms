@@ -29,18 +29,18 @@ describe("ROLE_PERMISSIONS matrix (imported from the real implementation)", () =
     }
   });
 
-  it("spans 41 unique permission keys across the matrix", () => {
+  it("spans 42 unique permission keys across the matrix", () => {
     const union = new Set(ALL_ROLES.flatMap((role) => ROLE_PERMISSIONS[role]));
-    expect(union.size).toBe(41);
+    expect(union.size).toBe(42);
   });
 
   it("gives ADMIN every key except security:read", () => {
     // Observed reality of the implementation: "security:read" is granted only
     // to SECURITY and is referenced nowhere else in src/. ADMIN holds the
-    // other 40 keys, including audit:read (which gates the security UI data).
+    // other 41 keys, including audit:read (which gates the security UI data).
     const union = new Set(ALL_ROLES.flatMap((role) => ROLE_PERMISSIONS[role]));
     const admin = new Set(ROLE_PERMISSIONS.ADMIN);
-    expect(admin.size).toBe(40);
+    expect(admin.size).toBe(41);
     expect([...union].filter((key) => !admin.has(key))).toEqual([
       "security:read",
     ]);
@@ -75,6 +75,14 @@ describe("ROLE_PERMISSIONS matrix (imported from the real implementation)", () =
     expect(hasPermission("SECURITY", "billing:write")).toBe(false);
     expect(hasPermission("DOCTOR", "billing:write")).toBe(false);
     expect(hasPermission("NURSE", "laboratory:write")).toBe(false);
+    expect(hasPermission("RECEPTIONIST", "prescriptions:write")).toBe(false);
+  });
+
+  it("restricts prescribing to clinical prescriber roles", () => {
+    const holders = ALL_ROLES.filter((role) =>
+      ROLE_PERMISSIONS[role].includes("prescriptions:write")
+    );
+    expect(holders).toEqual(["ADMIN", "DOCTOR", "SURGEON"]);
   });
 });
 

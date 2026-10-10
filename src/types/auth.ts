@@ -29,6 +29,7 @@ export const ROLE_PERMISSIONS: Record<Role, string[]> = {
     "patients:read",
     "patients:write",
     "patients:delete",
+    "prescriptions:write",
     "staff:read",
     "staff:write",
     "staff:delete",
@@ -70,6 +71,7 @@ export const ROLE_PERMISSIONS: Record<Role, string[]> = {
   DOCTOR: [
     "patients:read",
     "patients:write",
+    "prescriptions:write",
     "appointments:read",
     "appointments:write",
     "laboratory:read",
@@ -132,6 +134,7 @@ export const ROLE_PERMISSIONS: Record<Role, string[]> = {
   SURGEON: [
     "patients:read",
     "patients:write",
+    "prescriptions:write",
     "appointments:read",
     "surgery:read",
     "surgery:write",

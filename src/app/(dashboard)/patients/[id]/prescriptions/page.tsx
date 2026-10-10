@@ -2,14 +2,20 @@
 
 import { useState } from "react";
 import { useParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Breadcrumb } from "@/components/layout/breadcrumb";
 import { PrescriptionList, PrescriptionForm } from "@/components/clinical";
+import { hasPermission, type Role } from "@/types/auth";
 
 export default function PrescriptionsPage() {
   const params = useParams();
   const patientId = params.id as string;
   const [refreshKey, setRefreshKey] = useState(0);
   const [statusFilter, setStatusFilter] = useState("All");
+  const { data: session } = useSession();
+  const canWrite = session?.user?.role
+    ? hasPermission(session.user.role as Role, "prescriptions:write")
+    : false;
 
   return (
     <div>
@@ -43,7 +49,7 @@ export default function PrescriptionsPage() {
           </button>
         ))}
       </div>
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className={`grid gap-6 ${canWrite ? "lg:grid-cols-2" : ""}`}>
         <div>
           <h2 className="mb-3 text-lg font-semibold text-foreground">
             Prescription History
@@ -54,12 +60,14 @@ export default function PrescriptionsPage() {
             key={refreshKey}
           />
         </div>
-        <div>
-          <PrescriptionForm
-            patientId={patientId}
-            onSuccess={() => setRefreshKey((k) => k + 1)}
-          />
-        </div>
+        {canWrite && (
+          <div>
+            <PrescriptionForm
+              patientId={patientId}
+              onSuccess={() => setRefreshKey((k) => k + 1)}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

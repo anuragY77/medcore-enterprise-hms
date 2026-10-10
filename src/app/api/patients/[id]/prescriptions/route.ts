@@ -100,7 +100,7 @@ export async function POST(
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if (!hasPermission(session.user.role, "patients:write")) {
+    if (!hasPermission(session.user.role, "prescriptions:write")) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

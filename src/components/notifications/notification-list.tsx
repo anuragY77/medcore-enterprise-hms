@@ -10,7 +10,6 @@ import {
 
 interface NotificationListProps {
   notifications: NotificationRecord[];
-  search: string;
   hasFilters: boolean;
   meta: NotificationsMeta;
   markingId: string | null;
@@ -21,7 +20,6 @@ interface NotificationListProps {
 
 export function NotificationList({
   notifications,
-  search,
   hasFilters,
   meta,
   markingId,
@@ -30,15 +28,6 @@ export function NotificationList({
   onPageChange,
 }: NotificationListProps) {
   const { page, pageSize, total, totalPages } = meta;
-
-  const query = search.trim().toLowerCase();
-  const visible = query
-    ? notifications.filter(
-        (n) =>
-          n.title.toLowerCase().includes(query) ||
-          n.message.toLowerCase().includes(query)
-      )
-    : notifications;
 
   if (notifications.length === 0) {
     return (
@@ -55,23 +44,13 @@ export function NotificationList({
     );
   }
 
-  if (visible.length === 0) {
-    return (
-      <div className="bg-card rounded-lg border border-border/50 p-12 shadow-sm text-center">
-        <p className="text-sm text-muted-foreground">
-          No notifications match your current filters.
-        </p>
-      </div>
-    );
-  }
-
   const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const end = Math.min(page * pageSize, total);
 
   return (
     <div className="bg-card rounded-lg border border-border/50 shadow-sm overflow-hidden">
       <div className="p-4 flex flex-col gap-3">
-        {visible.map((notification) => (
+        {notifications.map((notification) => (
           <NotificationItem
             key={notification.id}
             notification={notification}

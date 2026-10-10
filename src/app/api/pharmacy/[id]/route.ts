@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
+import { recordAudit } from "@/lib/audit";
 import { hasPermission } from "@/types/auth";
 import { db, pharmacyMedicines } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
@@ -120,6 +121,16 @@ export async function PUT(
       .where(eq(pharmacyMedicines.id, id))
       .returning();
 
+    await recordAudit({
+      actorId: session.user.id,
+      action: "pharmacy.medicine.update",
+      entityType: "medicine",
+      entityId: updatedMedicine.id,
+      severity: "INFO",
+      category: "pharmacy",
+      success: true,
+      metadata: { medicineId: updatedMedicine.medicineId },
+    });
     return NextResponse.json(updatedMedicine);
   } catch (error) {
     console.error("Failed to update pharmacy medicine:", error);
