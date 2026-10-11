@@ -54,9 +54,10 @@ import type { NextConfig } from "next";
 //   rendering (the only remaining blocker above).
 // - HSTS: the app is served over plain HTTP on localhost in dev/staging and
 //   this config is shared across environments; enabling it locally would
-//   pin browsers to HTTPS for localhost. Tracked for TLS termination
-//   (README "Security & Hardening" carries the exact header to set at the
-//   reverse proxy).
+//   pin browsers to HTTPS for localhost. Tracked for TLS termination —
+//   README "Deployment boundary checklist" carries the exact header
+//   (`Strict-Transport-Security: max-age=31536000; includeSubDomains`, set
+//   at the TLS-terminating proxy on HTTPS responses only).
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   async headers() {

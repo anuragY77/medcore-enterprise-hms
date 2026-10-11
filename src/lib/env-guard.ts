@@ -34,6 +34,9 @@ const MIN_AUTH_SECRET_LENGTH = 32;
 export interface EnvSnapshot {
   AUTH_SECRET?: string | undefined;
   DATABASE_URL?: string | undefined;
+  AUTH_URL?: string | undefined;
+  /** Any non-empty value (Auth.js treats presence as "trust the Host header"). */
+  AUTH_TRUST_HOST?: string | undefined;
 }
 
 /**
@@ -57,6 +60,43 @@ export function productionEnvErrors(
     errors.push(
       `AUTH_SECRET must be at least ${MIN_AUTH_SECRET_LENGTH} characters (generate one with: openssl rand -base64 32)`
     );
+  }
+
+  // Phase 30: Auth.js (next-auth@5.0.0-beta.32 / @auth/core) computes
+  // `trustHost` as `!!(AUTH_URL ?? AUTH_TRUST_HOST ?? VERCEL ?? CF_PAGES ??
+  // NODE_ENV !== "production")`. In production with neither AUTH_URL nor
+  // AUTH_TRUST_HOST set, trustHost is false and assertConfig rejects EVERY
+  // auth request with UntrustedHost before any handler runs — reproduced
+  // live (next start, valid AUTH_SECRET + DATABASE_URL, no AUTH_URL):
+  // GET /api/auth/providers and /api/auth/session both returned 500
+  // "[auth][error] UntrustedHost: Host must be trusted", while /login still
+  // served its static shell (200) — the deploy looks healthy and nobody can
+  // sign in. env-guard therefore requires at least one of the two, and
+  // shape-checks AUTH_URL when present (the app's Origin CSRF check at
+  // src/app/api/auth/[...nextauth]/route.ts also resolves its expected
+  // origin from AUTH_URL, so a malformed value is a security-relevant
+  // misconfiguration, not just a cosmetic one).
+  const authUrl = env.AUTH_URL?.trim();
+  const trustHost = env.AUTH_TRUST_HOST?.trim();
+  if (!authUrl && !trustHost) {
+    errors.push(
+      "AUTH_URL (or AUTH_TRUST_HOST) is not set — production Auth.js rejects every auth request with UntrustedHost without it (set AUTH_URL to the public origin, e.g. https://hms.example.com)"
+    );
+  }
+  if (authUrl) {
+    let parsedAuthUrl: URL | null = null;
+    try {
+      parsedAuthUrl = new URL(authUrl);
+    } catch {
+      errors.push("AUTH_URL is not a valid URL");
+    }
+    if (
+      parsedAuthUrl &&
+      parsedAuthUrl.protocol !== "http:" &&
+      parsedAuthUrl.protocol !== "https:"
+    ) {
+      errors.push("AUTH_URL must use http:// or https://");
+    }
   }
 
   const url = env.DATABASE_URL?.trim();
