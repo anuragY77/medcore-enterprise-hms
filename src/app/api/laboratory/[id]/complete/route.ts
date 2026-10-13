@@ -5,7 +5,7 @@ import { hasPermission } from "@/types/auth";
 import { db, labTests, medicalRecords } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
 import { labResultEntrySchema } from "@/lib/validations/laboratory";
-import { recordAudit } from "@/lib/audit";
+import { insertAuditRow } from "@/lib/audit";
 import { resolveUserByName, recordNotifications } from "@/lib/notifications";
 
 type LabTestRow = typeof labTests.$inferSelect;
@@ -99,28 +99,29 @@ export async function POST(
         })
         .returning();
 
+      // Phase 32: audit row commits atomically with the completion.
+      await insertAuditRow(tx, {
+        actorId: session.user.id,
+        action: "laboratory.test.complete",
+        entityType: "lab_test",
+        entityId: updatedTest.id,
+        severity: "INFO",
+        category: "laboratory",
+        success: true,
+        metadata: {
+          testId: updatedTest.testId,
+          patientId: updatedTest.patientId,
+          consultationId: updatedTest.consultationId,
+          medicalRecordId: record.id,
+        },
+      });
+
       return { kind: "completed", test: updatedTest, record };
     });
 
     if (result.kind === "error") {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
-
-    await recordAudit({
-      actorId: session.user.id,
-      action: "laboratory.test.complete",
-      entityType: "lab_test",
-      entityId: result.test.id,
-      severity: "INFO",
-      category: "laboratory",
-      success: true,
-      metadata: {
-        testId: result.test.testId,
-        patientId: result.test.patientId,
-        consultationId: result.test.consultationId,
-        medicalRecordId: result.record.id,
-      },
-    });
 
     const orderingRecipients = await resolveUserByName(result.test.orderedBy);
     await recordNotifications({

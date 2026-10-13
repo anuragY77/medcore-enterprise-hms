@@ -5,7 +5,7 @@ import { hasPermission } from "@/types/auth";
 import { db, patients, patientAllergies, patientConditions, patientMedications, beds } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
 import { updatePatientSchema } from "@/lib/validations/patient";
-import { recordAudit } from "@/lib/audit";
+import { recordAudit, insertAuditRow } from "@/lib/audit";
 import { resolveUsersByDepartmentRole, recordNotifications } from "@/lib/notifications";
 import { validatePatientReference } from "@/lib/reference";
 
@@ -256,44 +256,47 @@ export async function DELETE(
         return { kind: "error", status: 404, error: "Patient not found" };
       }
 
+      // Phase 32: the delete and its audit rows share one transaction, so a
+      // 200 response guarantees the patient.delete (and any bed.release)
+      // audit records committed alongside the deletion itself.
+      await insertAuditRow(tx, {
+        actorId: session.user.id,
+        action: "patient.delete",
+        entityType: "patient",
+        entityId: deletedPatient.id,
+        severity: "WARNING",
+        category: "patients",
+        success: true,
+        metadata: {
+          patientId: deletedPatient.id,
+          patientNumber: deletedPatient.patientId,
+          status: deletedPatient.status,
+        },
+      });
+
+      for (const bed of occupiedBeds) {
+        await insertAuditRow(tx, {
+          actorId: session.user.id,
+          action: "bed.release",
+          entityType: "bed",
+          entityId: bed.id,
+          severity: "INFO",
+          category: "beds",
+          success: true,
+          metadata: {
+            bedId: bed.bedId,
+            patientId: deletedPatient.id,
+            statusFrom: bed.status,
+            statusTo: "Available",
+          },
+        });
+      }
+
       return { kind: "ok", patient: deletedPatient, releasedBeds: occupiedBeds };
     });
 
     if (result.kind === "error") {
       return NextResponse.json({ error: result.error }, { status: result.status });
-    }
-
-    await recordAudit({
-      actorId: session.user.id,
-      action: "patient.delete",
-      entityType: "patient",
-      entityId: result.patient.id,
-      severity: "WARNING",
-      category: "patients",
-      success: true,
-      metadata: {
-        patientId: result.patient.id,
-        patientNumber: result.patient.patientId,
-        status: result.patient.status,
-      },
-    });
-
-    for (const bed of result.releasedBeds) {
-      await recordAudit({
-        actorId: session.user.id,
-        action: "bed.release",
-        entityType: "bed",
-        entityId: bed.id,
-        severity: "INFO",
-        category: "beds",
-        success: true,
-        metadata: {
-          bedId: bed.bedId,
-          patientId: result.patient.id,
-          statusFrom: bed.status,
-          statusTo: "Available",
-        },
-      });
     }
 
     const bedsByDepartment = new Map<string, string[]>();

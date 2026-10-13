@@ -5,7 +5,7 @@ import { hasPermission } from "@/types/auth";
 import { db, patients, medicalRecords, beds } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
 import { dischargeSchema } from "@/lib/validations/clinical";
-import { recordAudit } from "@/lib/audit";
+import { insertAuditRow } from "@/lib/audit";
 import { resolveUserByName, resolveUsersByDepartmentRole, recordNotifications } from "@/lib/notifications";
 
 export async function POST(
@@ -115,29 +115,30 @@ export async function POST(
         recordDate: new Date(),
       });
 
+      // Phase 32: audit row joins the discharge transaction.
+      await insertAuditRow(tx, {
+        actorId: session.user.id,
+        action: "patient.discharge",
+        entityType: "patient",
+        entityId: updatedPatient.id,
+        severity: "INFO",
+        category: "admission",
+        success: true,
+        metadata: {
+          patientId: updatedPatient.id,
+          patientNumber: updatedPatient.patientId,
+          statusFrom: patient.status,
+          statusTo: updatedPatient.status,
+          releasedBeds: occupiedBeds.map((b) => b.bedId),
+        },
+      });
+
       return { kind: "ok", patient: updatedPatient, statusFrom: patient.status, releasedBeds: occupiedBeds };
     });
 
     if (result.kind === "error") {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
-
-    await recordAudit({
-      actorId: session.user.id,
-      action: "patient.discharge",
-      entityType: "patient",
-      entityId: result.patient.id,
-      severity: "INFO",
-      category: "admission",
-      success: true,
-      metadata: {
-        patientId: result.patient.id,
-        patientNumber: result.patient.patientId,
-        statusFrom: result.statusFrom,
-        statusTo: result.patient.status,
-        releasedBeds: result.releasedBeds.map((b) => b.bedId),
-      },
-    });
 
     const attendingRecipients = await resolveUserByName(result.patient.attendingDoctor);
     await recordNotifications({

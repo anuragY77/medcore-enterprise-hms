@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
 import { db, labTests } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
-import { recordAudit } from "@/lib/audit";
+import { insertAuditRow } from "@/lib/audit";
 import { resolveUserByName, recordNotifications } from "@/lib/notifications";
 
 export async function POST(
@@ -37,11 +37,39 @@ export async function POST(
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
     }
 
-    const [updatedTest] = await db
-      .update(labTests)
-      .set({ status: "In Progress", updatedAt: new Date() })
-      .where(and(eq(labTests.id, idParsed.data.id), eq(labTests.status, "Pending")))
-      .returning();
+    // Phase 32: the status transition and its audit row share one
+    // transaction, so the recorded Pending -> In Progress change and the
+    // audit record commit together or not at all.
+    const updatedTest = await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(labTests)
+        .set({ status: "In Progress", updatedAt: new Date() })
+        .where(and(eq(labTests.id, idParsed.data.id), eq(labTests.status, "Pending")))
+        .returning();
+
+      if (!updated) {
+        return null;
+      }
+
+      await insertAuditRow(tx, {
+        actorId: session.user.id,
+        action: "laboratory.test.process",
+        entityType: "lab_test",
+        entityId: updated.id,
+        severity: "INFO",
+        category: "laboratory",
+        success: true,
+        metadata: {
+          testId: updated.testId,
+          patientId: updated.patientId,
+          consultationId: updated.consultationId,
+          statusFrom: "Pending",
+          statusTo: updated.status,
+        },
+      });
+
+      return updated;
+    });
 
     if (!updatedTest) {
       const [existing] = await db
@@ -59,23 +87,6 @@ export async function POST(
         { status: 409 }
       );
     }
-
-    await recordAudit({
-      actorId: session.user.id,
-      action: "laboratory.test.process",
-      entityType: "lab_test",
-      entityId: updatedTest.id,
-      severity: "INFO",
-      category: "laboratory",
-      success: true,
-      metadata: {
-        testId: updatedTest.testId,
-        patientId: updatedTest.patientId,
-        consultationId: updatedTest.consultationId,
-        statusFrom: "Pending",
-        statusTo: updatedTest.status,
-      },
-    });
 
     const orderingRecipients = await resolveUserByName(updatedTest.orderedBy);
     await recordNotifications({

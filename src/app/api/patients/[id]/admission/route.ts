@@ -5,7 +5,7 @@ import { hasPermission } from "@/types/auth";
 import { db, patients, medicalRecords, beds } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
 import { admissionSchema } from "@/lib/validations/clinical";
-import { recordAudit } from "@/lib/audit";
+import { insertAuditRow } from "@/lib/audit";
 import { resolveUserByName, recordNotifications } from "@/lib/notifications";
 
 export async function POST(
@@ -120,29 +120,30 @@ export async function POST(
         recordDate: new Date(),
       });
 
+      // Phase 32: audit row joins the admission transaction.
+      await insertAuditRow(tx, {
+        actorId: session.user.id,
+        action: "patient.admit",
+        entityType: "patient",
+        entityId: updatedPatient.id,
+        severity: "INFO",
+        category: "admission",
+        success: true,
+        metadata: {
+          patientId: updatedPatient.id,
+          patientNumber: updatedPatient.patientId,
+          department: updatedPatient.department,
+          statusFrom: patient.status,
+          statusTo: updatedPatient.status,
+        },
+      });
+
       return { kind: "ok", patient: updatedPatient, statusFrom: patient.status };
     });
 
     if (result.kind === "error") {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
-
-    await recordAudit({
-      actorId: session.user.id,
-      action: "patient.admit",
-      entityType: "patient",
-      entityId: result.patient.id,
-      severity: "INFO",
-      category: "admission",
-      success: true,
-      metadata: {
-        patientId: result.patient.id,
-        patientNumber: result.patient.patientId,
-        department: result.patient.department,
-        statusFrom: result.statusFrom,
-        statusTo: result.patient.status,
-      },
-    });
 
     const attendingRecipients = await resolveUserByName(result.patient.attendingDoctor);
     await recordNotifications({

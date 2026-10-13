@@ -6,7 +6,7 @@ import { db, prescriptions, pharmacyMedicines } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
 import { dispenseSchema } from "@/lib/validations/pharmacy";
 import { pickMatchingMedicine } from "@/lib/pharmacy";
-import { recordAudit } from "@/lib/audit";
+import { insertAuditRow } from "@/lib/audit";
 import { resolveUserByName, recordNotifications } from "@/lib/notifications";
 
 type PrescriptionRow = typeof prescriptions.$inferSelect;
@@ -141,6 +141,27 @@ export async function POST(
         .where(eq(prescriptions.id, prescription.id))
         .returning();
 
+      // Phase 32: the audit row joins the clinical transaction, so a 201
+      // response guarantees both the dispense and its audit record committed.
+      await insertAuditRow(tx, {
+        actorId: session.user.id,
+        action: "pharmacy.dispense",
+        entityType: "prescription",
+        entityId: updatedPrescription.id,
+        severity: "INFO",
+        category: "pharmacy",
+        success: true,
+        metadata: {
+          prescriptionId: updatedPrescription.id,
+          medicineId: updatedMedicine.id,
+          medicineCode: updatedMedicine.medicineId,
+          patientId: updatedPrescription.patientId,
+          quantity,
+          unit: updatedMedicine.unit,
+          stockAfter: updatedMedicine.stockQuantity,
+        },
+      });
+
       return {
         kind: "dispensed",
         prescription: updatedPrescription,
@@ -151,25 +172,6 @@ export async function POST(
     if (result.kind === "error") {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
-
-    await recordAudit({
-      actorId: session.user.id,
-      action: "pharmacy.dispense",
-      entityType: "prescription",
-      entityId: result.prescription.id,
-      severity: "INFO",
-      category: "pharmacy",
-      success: true,
-      metadata: {
-        prescriptionId: result.prescription.id,
-        medicineId: result.medicine.id,
-        medicineCode: result.medicine.medicineId,
-        patientId: result.prescription.patientId,
-        quantity,
-        unit: result.medicine.unit,
-        stockAfter: result.medicine.stockQuantity,
-      },
-    });
 
     const prescriberRecipients = await resolveUserByName(result.prescription.prescribedBy);
     await recordNotifications({

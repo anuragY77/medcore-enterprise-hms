@@ -5,7 +5,7 @@ import { hasPermission } from "@/types/auth";
 import { db, beds, patients } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
 import { bedAssignSchema } from "@/lib/validations/bed";
-import { recordAudit } from "@/lib/audit";
+import { insertAuditRow } from "@/lib/audit";
 import { resolveUsersByDepartmentRole, recordNotifications } from "@/lib/notifications";
 
 const OCCUPIED_STATUSES = ["Occupied"];
@@ -133,28 +133,29 @@ export async function POST(
         .where(eq(beds.id, id))
         .returning();
 
+      // Phase 32: audit row joins the assignment transaction.
+      await insertAuditRow(tx, {
+        actorId: session.user.id,
+        action: "bed.assign",
+        entityType: "bed",
+        entityId: updatedBed.id,
+        severity: "INFO",
+        category: "beds",
+        success: true,
+        metadata: {
+          bedId: updatedBed.bedId,
+          patientId: updatedBed.patientId,
+          statusFrom: previousStatus,
+          statusTo: updatedBed.status,
+        },
+      });
+
       return { kind: "ok", bed: updatedBed, previousStatus };
     });
 
     if (result.kind === "error") {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
-
-    await recordAudit({
-      actorId: session.user.id,
-      action: "bed.assign",
-      entityType: "bed",
-      entityId: result.bed.id,
-      severity: "INFO",
-      category: "beds",
-      success: true,
-      metadata: {
-        bedId: result.bed.bedId,
-        patientId: result.bed.patientId,
-        statusFrom: result.previousStatus,
-        statusTo: result.bed.status,
-      },
-    });
 
     const nurseRecipients = await resolveUsersByDepartmentRole("NURSE", result.bed.department);
     await recordNotifications({

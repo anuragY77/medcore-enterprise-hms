@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { hasPermission } from "@/types/auth";
 import { db, beds } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
-import { recordAudit } from "@/lib/audit";
+import { insertAuditRow } from "@/lib/audit";
 import { resolveUsersByDepartmentRole, recordNotifications } from "@/lib/notifications";
 
 export async function POST(
@@ -74,28 +74,29 @@ export async function POST(
         .where(eq(beds.id, id))
         .returning();
 
+      // Phase 32: audit row joins the release transaction.
+      await insertAuditRow(tx, {
+        actorId: session.user.id,
+        action: "bed.release",
+        entityType: "bed",
+        entityId: updatedBed.id,
+        severity: "INFO",
+        category: "beds",
+        success: true,
+        metadata: {
+          bedId: updatedBed.bedId,
+          patientId: previousPatientId,
+          statusFrom: "Occupied",
+          statusTo: updatedBed.status,
+        },
+      });
+
       return { kind: "ok", bed: updatedBed, previousPatientId };
     });
 
     if (result.kind === "error") {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
-
-    await recordAudit({
-      actorId: session.user.id,
-      action: "bed.release",
-      entityType: "bed",
-      entityId: result.bed.id,
-      severity: "INFO",
-      category: "beds",
-      success: true,
-      metadata: {
-        bedId: result.bed.bedId,
-        patientId: result.previousPatientId,
-        statusFrom: "Occupied",
-        statusTo: result.bed.status,
-      },
-    });
 
     const nurseRecipients = await resolveUsersByDepartmentRole("NURSE", result.bed.department);
     await recordNotifications({

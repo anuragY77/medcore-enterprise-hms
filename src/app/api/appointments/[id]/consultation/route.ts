@@ -5,7 +5,7 @@ import { hasPermission } from "@/types/auth";
 import { db, appointments, consultations } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
 import { consultationSchema } from "@/lib/validations/clinical";
-import { recordAudit } from "@/lib/audit";
+import { insertAuditRow } from "@/lib/audit";
 import { resolveUserByName, recordNotifications } from "@/lib/notifications";
 
 const ELIGIBLE_STATUSES = ["Scheduled", "Confirmed"];
@@ -106,27 +106,28 @@ export async function POST(
         })
         .returning();
 
+      // Phase 32: audit row joins the consultation-create transaction.
+      await insertAuditRow(tx, {
+        actorId: session.user.id,
+        action: "consultation.start",
+        entityType: "consultation",
+        entityId: consultation.id,
+        severity: "INFO",
+        category: "consultations",
+        success: true,
+        metadata: {
+          appointmentId: appointment.id,
+          appointmentCode: appointment.appointmentId,
+          patientId: appointment.patientId,
+        },
+      });
+
       return { kind: "created", consultation, appointment };
     });
 
     if (result.kind === "error") {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
-
-    await recordAudit({
-      actorId: session.user.id,
-      action: "consultation.start",
-      entityType: "consultation",
-      entityId: result.consultation.id,
-      severity: "INFO",
-      category: "consultations",
-      success: true,
-      metadata: {
-        appointmentId: result.appointment.id,
-        appointmentCode: result.appointment.appointmentId,
-        patientId: result.appointment.patientId,
-      },
-    });
 
     const doctorRecipients = await resolveUserByName(result.appointment.doctorName);
     await recordNotifications({

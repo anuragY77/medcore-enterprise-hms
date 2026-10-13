@@ -5,7 +5,7 @@ import { hasPermission } from "@/types/auth";
 import { db, beds, patients } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
 import { bedTransferSchema } from "@/lib/validations/bed";
-import { recordAudit } from "@/lib/audit";
+import { insertAuditRow } from "@/lib/audit";
 import { resolveUsersByDepartmentRole, recordNotifications } from "@/lib/notifications";
 
 type TransferResult =
@@ -161,6 +161,22 @@ export async function POST(
         return { kind: "error", status: 409, error: "Bed is not available for assignment" };
       }
 
+      // Phase 32: audit row joins the transfer transaction.
+      await insertAuditRow(tx, {
+        actorId: session.user.id,
+        action: "patient.transfer",
+        entityType: "patient",
+        entityId: lockedPatient.id,
+        severity: "INFO",
+        category: "admission",
+        success: true,
+        metadata: {
+          patientId: lockedPatient.id,
+          sourceBedId: updatedSource.id,
+          destinationBedId: updatedDestination.id,
+        },
+      });
+
       return {
         kind: "ok",
         patient: { id: lockedPatient.id, patientId: lockedPatient.patientId },
@@ -172,21 +188,6 @@ export async function POST(
     if (result.kind === "error") {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
-
-    await recordAudit({
-      actorId: session.user.id,
-      action: "patient.transfer",
-      entityType: "patient",
-      entityId: result.patient.id,
-      severity: "INFO",
-      category: "admission",
-      success: true,
-      metadata: {
-        patientId: result.patient.id,
-        sourceBedId: result.source.id,
-        destinationBedId: result.destination.id,
-      },
-    });
 
     const sourceNurses = await resolveUsersByDepartmentRole("NURSE", result.source.department);
     const destinationNurses = await resolveUsersByDepartmentRole("NURSE", result.destination.department);
