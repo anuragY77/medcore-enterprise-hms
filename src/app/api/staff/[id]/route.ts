@@ -5,7 +5,7 @@ import { hasPermission } from "@/types/auth";
 import { db, staff } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
 import { staffSchema } from "@/lib/validations/staff";
-import { recordAudit } from "@/lib/audit";
+import { recordAudit, insertAuditRow } from "@/lib/audit";
 
 export async function GET(
   request: NextRequest,
@@ -161,30 +161,44 @@ export async function DELETE(
       );
     }
 
-    const [deletedStaff] = await db
-      .delete(staff)
-      .where(eq(staff.id, id))
-      .returning();
+    type DeleteStaffResult =
+      | { kind: "error"; status: number; error: string }
+      | { kind: "ok" };
 
-    if (!deletedStaff) {
-      return NextResponse.json({ error: "Staff not found" }, { status: 404 });
-    }
+    const result: DeleteStaffResult = await db.transaction(async (tx) => {
+      const [deletedStaff] = await tx
+        .delete(staff)
+        .where(eq(staff.id, id))
+        .returning();
 
-    await recordAudit({
-      actorId: session.user.id,
-      action: "staff.delete",
-      entityType: "staff",
-      entityId: deletedStaff.id,
-      severity: "WARNING",
-      category: "staff",
-      success: true,
-      metadata: {
-        staffCode: deletedStaff.staffId,
-        role: deletedStaff.role,
-        department: deletedStaff.department,
-        status: deletedStaff.status,
-      },
+      if (!deletedStaff) {
+        return { kind: "error" as const, status: 404, error: "Staff not found" };
+      }
+
+      // Phase 33: the delete and its audit row share one transaction, so a
+      // 200 response guarantees the staff deletion is traceable.
+      await insertAuditRow(tx, {
+        actorId: session.user.id,
+        action: "staff.delete",
+        entityType: "staff",
+        entityId: deletedStaff.id,
+        severity: "WARNING",
+        category: "staff",
+        success: true,
+        metadata: {
+          staffCode: deletedStaff.staffId,
+          role: deletedStaff.role,
+          department: deletedStaff.department,
+          status: deletedStaff.status,
+        },
+      });
+
+      return { kind: "ok" as const };
     });
+
+    if (result.kind === "error") {
+      return NextResponse.json({ error: result.error }, { status: result.status });
+    }
 
     return NextResponse.json({ message: "Staff deleted" });
   } catch (error) {

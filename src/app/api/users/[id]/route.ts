@@ -5,7 +5,7 @@ import { hasPermission } from "@/types/auth";
 import { db, users } from "@/lib/db";
 import { updateUserSchema, userIdSchema } from "@/lib/validations/user";
 import { idParamSchema } from "@/lib/validations/common";
-import { recordAudit } from "@/lib/audit";
+import { recordAudit, insertAuditRow } from "@/lib/audit";
 
 const SAFE_USER_FIELDS = {
   id: users.id,
@@ -244,12 +244,40 @@ export async function DELETE(
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    let deleted: { id: string } | undefined;
+    type DeleteUserResult =
+      | { kind: "error"; status: number; error: string }
+      | { kind: "ok" };
+
+    let result: DeleteUserResult;
     try {
-      [deleted] = await db
-        .delete(users)
-        .where(eq(users.id, parsedId.data))
-        .returning({ id: users.id });
+      result = await db.transaction(async (tx): Promise<DeleteUserResult> => {
+        const [deleted] = await tx
+          .delete(users)
+          .where(eq(users.id, parsedId.data))
+          .returning({ id: users.id });
+
+        if (!deleted) {
+          return { kind: "error", status: 404, error: "User not found" };
+        }
+
+        // Phase 33: the delete and its audit row share one transaction, so a
+        // 200 response guarantees the account deletion is traceable (a
+        // destructive security mutation is never committed without its audit
+        // record). The audit references the acting admin, not the deleted
+        // user, so the actor_id RESTRICT cannot conflict here.
+        await insertAuditRow(tx, {
+          actorId: session.user.id,
+          action: "user.delete",
+          entityType: "user",
+          entityId: parsedId.data,
+          severity: "INFO",
+          category: "users",
+          success: true,
+          metadata: { role: existing.role, department: existing.department },
+        });
+
+        return { kind: "ok" };
+      });
     } catch (error) {
       const code = pgErrorCode(error);
       if (code === "23503" || code === "23001") {
@@ -261,20 +289,9 @@ export async function DELETE(
       throw error;
     }
 
-    if (!deleted) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    if (result.kind === "error") {
+      return NextResponse.json({ error: result.error }, { status: result.status });
     }
-
-    await recordAudit({
-      actorId: session.user.id,
-      action: "user.delete",
-      entityType: "user",
-      entityId: parsedId.data,
-      severity: "INFO",
-      category: "users",
-      success: true,
-      metadata: { role: existing.role, department: existing.department },
-    });
 
     return NextResponse.json({ message: "User deleted" });
   } catch (error) {

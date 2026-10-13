@@ -63,11 +63,15 @@ audit rows after deletion.
 ### Audit trail
 
 - Append-only at the application layer: no UPDATE/DELETE code path exists;
-  Phase 32 moved clinical mutation audits into the same transaction as the
-  mutation (see README "Audit semantics"), so success responses guarantee
-  audit rows committed.
+  Phase 32/33 moved clinical and financial mutation audits into the same
+  transaction as the mutation (see README "Audit semantics"), so success
+  responses guarantee audit rows committed, and audit failure rolls the
+  mutation back.
 - No retention/pruning of `audit_logs` exists; the table grows unbounded.
 - `audit_logs.entity_id` deliberately has no FK so history outlives entities.
+- **Not** append-only at the database layer: no trigger or permission
+  prevents an UPDATE/DELETE run directly against the table (see decision 6
+  for the proposal).
 
 ### Everything else
 
@@ -147,11 +151,87 @@ shows `actor: null`.
 
 Decision: ____________________  Owner: ____________  Date: __________
 
+## 6. Database-level audit immutability (append-only enforcement)
+
+Phase 33 verified the application layer never updates or deletes audit rows
+(no endpoint, no code path), but that is not a DBA-level guarantee: any
+connection with the application role can still run
+`UPDATE audit_logs …` / `DELETE FROM audit_logs …` directly. A database
+trigger can close that gap. **The trigger is documented here and deliberately
+NOT deployed**, for two owner-dependent reasons:
+
+1. Test and maintenance cleanup legitimately deletes synthetic audit rows
+   (four integration test files delete their own `actor_id` rows). A hard
+   block requires a maintenance escape hatch whose privilege model the owner
+   must approve.
+2. Audit-trail retention (decision 3) is unapproved. Deploying a hard block
+   before a retention answer exists would later require a privileged
+   bypass or a second migration to undo it.
+
+Proposal (to deploy only after decisions 3 and 6 are approved):
+
+```sql
+-- Migration sketch — NOT applied. Review with decision-3 answer in hand.
+CREATE OR REPLACE FUNCTION audit_logs_block_mutation() RETURNS trigger AS $$
+BEGIN
+  IF current_setting('medcore.audit_maintenance', true) = 'on' THEN
+    IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+    RETURN NEW; -- UPDATE path only reachable in maintenance mode
+  END IF;
+  RAISE EXCEPTION 'audit_logs is append-only (% not permitted)', TG_OP
+    USING ERRCODE = 'restrict_violation';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER audit_logs_no_mutation
+  BEFORE UPDATE OR DELETE ON audit_logs
+  FOR EACH ROW EXECUTE FUNCTION audit_logs_block_mutation();
+```
+
+Operational consequences if deployed:
+
+- Application traffic is unaffected (only INSERTs audit rows).
+- Direct `UPDATE`/`DELETE` against `audit_logs` fails with
+  `restrict_violation` unless the session first runs
+  `SET LOCAL medcore.audit_maintenance = 'on'` inside a transaction owned by
+  a role the owner designates for maintenance/retention work.
+- Integration-test cleanup must adopt the same `SET LOCAL` pattern before
+  deleting synthetic rows (four files: `audit-reliability`,
+  `clinical-workflows`, `concurrency-invariants`, `session-endpoint-guard`).
+- The application role cannot self-grant the bypass beyond the GUC switch;
+  restricting who can connect and run `SET` is a DBA control outside this
+  repository.
+
+Rollback plan (if a deployed trigger must be removed):
+
+```sql
+DROP TRIGGER IF EXISTS audit_logs_no_mutation ON audit_logs;
+DROP FUNCTION IF EXISTS audit_logs_block_mutation();
+```
+
+Verification command (after any future deployment):
+
+```sql
+-- Must fail with restrict_violation:
+BEGIN; DELETE FROM audit_logs WHERE false; COMMIT;  -- delete path blocked even for zero rows when the trigger raises BEFORE the scan? (use an existing row in a sandbox DB instead)
+-- Practical check on a sandbox database with one synthetic row:
+BEGIN;
+DELETE FROM audit_logs WHERE id = '<synthetic-row-uuid>';  -- expect exception
+ROLLBACK;
+BEGIN;
+SET LOCAL medcore.audit_maintenance = 'on';
+DELETE FROM audit_logs WHERE id = '<synthetic-row-uuid>';  -- expect success
+COMMIT;
+```
+
+Decision (deploy trigger now / after retention / never):
+________________________________  Owner: ____________  Date: __________
+
 ---
 
 ## Approval
 
-When all five decisions above are filled in, the product/compliance owner
+When all six decisions above are filled in, the product/compliance owner
 signs off:
 
 Approved by: ____________________  Date: __________

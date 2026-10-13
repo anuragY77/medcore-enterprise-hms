@@ -7,7 +7,7 @@ import { db, insuranceClaims, patients, invoices } from "@/lib/db";
 import { paginationSchema } from "@/lib/validations/common";
 import { insuranceClaimSchema } from "@/lib/validations/insurance";
 import { isUniqueViolation } from "@/lib/billing";
-import { recordAudit } from "@/lib/audit";
+import { insertAuditRow } from "@/lib/audit";
 import { nextBusinessId } from "@/lib/business-id";
 import { resolveUsersByRole, recordNotifications } from "@/lib/notifications";
 
@@ -280,6 +280,26 @@ export async function POST(request: NextRequest) {
             })
             .returning();
 
+          // Phase 33: the audit row joins the claim-create transaction, so a
+          // 201 response guarantees both the claim and its audit record
+          // committed (a financial claim is never created untraceably).
+          await insertAuditRow(tx, {
+            actorId: session.user.id,
+            action: "insurance.claim.create",
+            entityType: "insurance_claim",
+            entityId: newClaim.id,
+            severity: "INFO",
+            category: "insurance",
+            success: true,
+            metadata: {
+              claimId: newClaim.claimId,
+              patientId: newClaim.patientId,
+              invoiceId: newClaim.invoiceId,
+              status: newClaim.status,
+              claimAmount: newClaim.claimAmount,
+            },
+          });
+
           return { kind: "ok", claim: newClaim };
         });
       } catch (error) {
@@ -299,23 +319,6 @@ export async function POST(request: NextRequest) {
     }
 
     const newClaim = result.claim;
-
-    await recordAudit({
-      actorId: session.user.id,
-      action: "insurance.claim.create",
-      entityType: "insurance_claim",
-      entityId: newClaim.id,
-      severity: "INFO",
-      category: "insurance",
-      success: true,
-      metadata: {
-        claimId: newClaim.claimId,
-        patientId: newClaim.patientId,
-        invoiceId: newClaim.invoiceId,
-        status: newClaim.status,
-        claimAmount: newClaim.claimAmount,
-      },
-    });
 
     const billingRecipients = await resolveUsersByRole("BILLING");
     await recordNotifications({

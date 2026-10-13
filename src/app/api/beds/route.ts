@@ -5,7 +5,7 @@ import { hasPermission } from "@/types/auth";
 import { db, beds, patients } from "@/lib/db";
 import { paginationSchema } from "@/lib/validations/common";
 import { bedSchema } from "@/lib/validations/bed";
-import { recordAudit } from "@/lib/audit";
+import { recordAudit, insertAuditRow } from "@/lib/audit";
 import { nextBusinessId } from "@/lib/business-id";
 import { resolveUsersByDepartmentRole, recordNotifications } from "@/lib/notifications";
 
@@ -232,6 +232,26 @@ export async function POST(request: NextRequest) {
               })
               .returning();
 
+            // Phase 33: the audit row joins the occupied-bed-create
+            // transaction, so a 201 response guarantees both the assignment
+            // and its audit record committed (same guarantee as the /assign
+            // endpoint — occupancy is never created untraceably).
+            await insertAuditRow(tx, {
+              actorId: session.user.id,
+              action: "bed.assign",
+              entityType: "bed",
+              entityId: row.id,
+              severity: "INFO",
+              category: "beds",
+              success: true,
+              metadata: {
+                bedId: row.bedId,
+                patientId: row.patientId,
+                statusFrom: "Available",
+                statusTo: row.status,
+              },
+            });
+
             return { kind: "ok" as const, bed: row };
           });
         } catch (error) {
@@ -246,22 +266,6 @@ export async function POST(request: NextRequest) {
       if (result.kind === "error") {
         return NextResponse.json({ error: result.error }, { status: result.status });
       }
-
-      await recordAudit({
-        actorId: session.user.id,
-        action: "bed.assign",
-        entityType: "bed",
-        entityId: result.bed.id,
-        severity: "INFO",
-        category: "beds",
-        success: true,
-        metadata: {
-          bedId: result.bed.bedId,
-          patientId: result.bed.patientId,
-          statusFrom: "Available",
-          statusTo: result.bed.status,
-        },
-      });
 
       const nurseRecipients = await resolveUsersByDepartmentRole("NURSE", result.bed.department);
       await recordNotifications({
@@ -296,6 +300,25 @@ export async function POST(request: NextRequest) {
         if (!isUniqueViolation(error) || attempt === 4) throw error;
       }
     }
+
+    if (!newBed) {
+      return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    }
+
+    // Phase 33: closes an audit omission — every other create endpoint
+    // records its mutation; an Available-bed create is a non-transactional
+    // single insert, so the audit stays best-effort (failure counter covers
+    // observability) like the other simple creates.
+    await recordAudit({
+      actorId: session.user.id,
+      action: "bed.create",
+      entityType: "bed",
+      entityId: newBed.id,
+      severity: "INFO",
+      category: "beds",
+      success: true,
+      metadata: { bedId: newBed.bedId, status: newBed.status },
+    });
 
     return NextResponse.json(newBed, { status: 201 });
   } catch (error) {

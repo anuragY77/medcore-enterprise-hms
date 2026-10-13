@@ -5,7 +5,7 @@ import { hasPermission } from "@/types/auth";
 import { db, insuranceClaims, invoices } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
 import { insuranceClaimSchema } from "@/lib/validations/insurance";
-import { recordAudit } from "@/lib/audit";
+import { insertAuditRow } from "@/lib/audit";
 import { resolveUsersByRole, recordNotifications } from "@/lib/notifications";
 
 const ALLOWED_TRANSITIONS: Record<string, string[]> = {
@@ -276,31 +276,34 @@ export async function PUT(
         .where(eq(insuranceClaims.id, id))
         .returning();
 
+      // Phase 33: the audit row joins the claim-update transaction, so a 200
+      // response guarantees both the claim change and its audit record
+      // committed (status transitions on claims are never untraceable).
+      await insertAuditRow(tx, {
+        actorId: session.user.id,
+        action: "insurance.claim.update",
+        entityType: "insurance_claim",
+        entityId: updatedClaim.id,
+        severity: "INFO",
+        category: "insurance",
+        success: true,
+        metadata: {
+          claimId: updatedClaim.claimId,
+          patientId: updatedClaim.patientId,
+          invoiceId: updatedClaim.invoiceId,
+          statusFrom: existing.status,
+          statusTo: updatedClaim.status,
+          claimAmount: updatedClaim.claimAmount,
+          approvedAmount: updatedClaim.approvedAmount,
+        },
+      });
+
       return { kind: "ok", claim: updatedClaim, previous: existing };
     });
 
     if (result.kind === "error") {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
-
-    await recordAudit({
-      actorId: session.user.id,
-      action: "insurance.claim.update",
-      entityType: "insurance_claim",
-      entityId: result.claim.id,
-      severity: "INFO",
-      category: "insurance",
-      success: true,
-      metadata: {
-        claimId: result.claim.claimId,
-        patientId: result.claim.patientId,
-        invoiceId: result.claim.invoiceId,
-        statusFrom: result.previous.status,
-        statusTo: result.claim.status,
-        claimAmount: result.claim.claimAmount,
-        approvedAmount: result.claim.approvedAmount,
-      },
-    });
 
     if (result.previous.status !== result.claim.status) {
       const billingRecipients = await resolveUsersByRole("BILLING");

@@ -3,7 +3,8 @@
 // Contract: liveness is always HTTP 200 while the process serves; readiness
 // is the `checks.database` field ("ok" only when SELECT 1 round-trips). The
 // response must never contain connection strings, secrets, or stack traces.
-// The auditWriteFailures counter is visible only to security:read sessions.
+// The auditWriteFailures counter is visible only to audit:read sessions
+// (SECURITY/ADMIN), and it reflects the live in-process counter.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const dbCtl = vi.hoisted(() => ({
@@ -102,5 +103,28 @@ describe("GET /api/health", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.checks.database).toBe("ok");
+  });
+
+  it("exposes the live audit-failure counter (not a constant)", async () => {
+    const { resetAuditFailureCountForTests, recordAudit } = await import(
+      "@/lib/audit"
+    );
+    resetAuditFailureCountForTests();
+    // The mocked db has no insert(), so this best-effort write fails and
+    // increments the in-process counter — the exact signal the endpoint
+    // reports. (In production the same increment happens when a real
+    // insert throws; transactional paths never touch this counter.)
+    await recordAudit({
+      actorId: "user-1",
+      action: "unit.counter.probe",
+    });
+
+    authCtl.session = session("ADMIN");
+    const res = await GET();
+    const body = await res.json();
+    expect(body.auditWriteFailures).toBe(1);
+
+    // Reset so later test runs see a clean counter (module state is shared).
+    resetAuditFailureCountForTests();
   });
 });

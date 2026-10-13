@@ -5,7 +5,7 @@ import { hasPermission } from "@/types/auth";
 import { db, appointments, patients } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
 import { appointmentSchema } from "@/lib/validations/appointment";
-import { recordAudit } from "@/lib/audit";
+import { recordAudit, insertAuditRow } from "@/lib/audit";
 import { resolveUserByName, recordNotifications } from "@/lib/notifications";
 
 export async function GET(
@@ -193,29 +193,43 @@ export async function DELETE(
       );
     }
 
-    const [deletedAppointment] = await db
-      .delete(appointments)
-      .where(eq(appointments.id, id))
-      .returning();
+    type DeleteAppointmentResult =
+      | { kind: "error"; status: number; error: string }
+      | { kind: "ok" };
 
-    if (!deletedAppointment) {
-      return NextResponse.json({ error: "Appointment not found" }, { status: 404 });
-    }
+    const result: DeleteAppointmentResult = await db.transaction(async (tx) => {
+      const [deletedAppointment] = await tx
+        .delete(appointments)
+        .where(eq(appointments.id, id))
+        .returning();
 
-    await recordAudit({
-      actorId: session.user.id,
-      action: "appointment.delete",
-      entityType: "appointment",
-      entityId: deletedAppointment.id,
-      severity: "WARNING",
-      category: "appointments",
-      success: true,
-      metadata: {
-        appointmentCode: deletedAppointment.appointmentId,
-        patientId: deletedAppointment.patientId,
-        status: deletedAppointment.status,
-      },
+      if (!deletedAppointment) {
+        return { kind: "error" as const, status: 404, error: "Appointment not found" };
+      }
+
+      // Phase 33: the delete and its audit row share one transaction, so a
+      // 200 response guarantees the appointment deletion is traceable.
+      await insertAuditRow(tx, {
+        actorId: session.user.id,
+        action: "appointment.delete",
+        entityType: "appointment",
+        entityId: deletedAppointment.id,
+        severity: "WARNING",
+        category: "appointments",
+        success: true,
+        metadata: {
+          appointmentCode: deletedAppointment.appointmentId,
+          patientId: deletedAppointment.patientId,
+          status: deletedAppointment.status,
+        },
+      });
+
+      return { kind: "ok" as const };
     });
+
+    if (result.kind === "error") {
+      return NextResponse.json({ error: result.error }, { status: result.status });
+    }
 
     return NextResponse.json({ message: "Appointment deleted" });
   } catch (error) {

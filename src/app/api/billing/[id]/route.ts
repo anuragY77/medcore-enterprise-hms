@@ -6,7 +6,7 @@ import { db, invoices, insuranceClaims, appointments } from "@/lib/db";
 import { idParamSchema } from "@/lib/validations/common";
 import { invoiceSchema } from "@/lib/validations/billing";
 import { computeInvoiceTotal } from "@/lib/billing";
-import { recordAudit } from "@/lib/audit";
+import { insertAuditRow } from "@/lib/audit";
 import { resolveUsersByRole, recordNotifications } from "@/lib/notifications";
 
 export async function GET(
@@ -236,28 +236,31 @@ export async function PUT(
         .where(eq(invoices.id, id))
         .returning();
 
+      // Phase 33: the audit row joins the invoice-update transaction, so a
+      // 200 response guarantees both the financial change and its audit
+      // record committed (a paid-status flip is never untraceable).
+      await insertAuditRow(tx, {
+        actorId: session.user.id,
+        action: "billing.invoice.update",
+        entityType: "invoice",
+        entityId: updatedInvoice.id,
+        severity: "INFO",
+        category: "billing",
+        success: true,
+        metadata: {
+          invoiceId: updatedInvoice.invoiceId,
+          patientId: updatedInvoice.patientId,
+          status: updatedInvoice.status,
+          totalAmount: updatedInvoice.totalAmount,
+        },
+      });
+
       return { kind: "ok", invoice: updatedInvoice, previousStatus: existing.status };
     });
 
     if (result.kind === "error") {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
-
-    await recordAudit({
-      actorId: session.user.id,
-      action: "billing.invoice.update",
-      entityType: "invoice",
-      entityId: result.invoice.id,
-      severity: "INFO",
-      category: "billing",
-      success: true,
-      metadata: {
-        invoiceId: result.invoice.invoiceId,
-        patientId: result.invoice.patientId,
-        status: result.invoice.status,
-        totalAmount: result.invoice.totalAmount,
-      },
-    });
 
     if (result.previousStatus !== result.invoice.status) {
       const billingRecipients = await resolveUsersByRole("BILLING");
@@ -339,28 +342,31 @@ export async function DELETE(
         return { kind: "error", status: 404, error: "Invoice not found" };
       }
 
+      // Phase 33: the delete and its audit row share one transaction, so a
+      // 200 response guarantees the deletion is traceable (a destructive
+      // financial operation is never committed without its audit record).
+      await insertAuditRow(tx, {
+        actorId: session.user.id,
+        action: "billing.invoice.delete",
+        entityType: "invoice",
+        entityId: deletedInvoice.id,
+        severity: "INFO",
+        category: "billing",
+        success: true,
+        metadata: {
+          invoiceId: deletedInvoice.invoiceId,
+          patientId: deletedInvoice.patientId,
+          status: deletedInvoice.status,
+          totalAmount: deletedInvoice.totalAmount,
+        },
+      });
+
       return { kind: "ok", invoice: deletedInvoice };
     });
 
     if (result.kind === "error") {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
-
-    await recordAudit({
-      actorId: session.user.id,
-      action: "billing.invoice.delete",
-      entityType: "invoice",
-      entityId: result.invoice.id,
-      severity: "INFO",
-      category: "billing",
-      success: true,
-      metadata: {
-        invoiceId: result.invoice.invoiceId,
-        patientId: result.invoice.patientId,
-        status: result.invoice.status,
-        totalAmount: result.invoice.totalAmount,
-      },
-    });
 
     const billingRecipients = await resolveUsersByRole("BILLING");
     await recordNotifications({
