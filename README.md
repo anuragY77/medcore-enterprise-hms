@@ -378,6 +378,13 @@ medicines, ER cases, surgeries and more. The seed:
 
 > 💡 Log in as **admin** for the full experience, then switch roles to see RBAC in action — menus, buttons, and API responses all change.
 
+> ⚠️ **These credentials are intentionally public and must never gate a real
+> system.** They only work against a locally seeded demo database (synthetic
+> data); the seed refuses production-like targets and `NODE_ENV=production`,
+> and a production boot refuses placeholder secrets. Before any deployment,
+> change or remove every demo account and rotate all secrets — do not expose
+> a seeded demo to a public network.
+
 ---
 
 ## 📁 Project Structure

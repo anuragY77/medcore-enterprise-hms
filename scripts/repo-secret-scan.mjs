@@ -4,7 +4,9 @@
 // Scope:
 //   Default: every file tracked by git (working-tree content), plus path rules
 //   applied to the tracked path list itself. Optional: --paths <file...> scans
-//   explicit files (used by tests and for ad-hoc checks).
+//   explicit files (used by tests and for ad-hoc checks). Optional:
+//   --rev <ref> scans every blob reachable from a ref (full-history mode;
+//   R5 path rules apply to historical pathnames too).
 //
 // Rules:
 //   R1 PRIVATE_KEY   private key material blocks
@@ -57,7 +59,7 @@ export function isForbiddenTrackedPath(path) {
   const base = posix.split("/").pop();
   if (["Architecture.md", "Design.md", "PRD.md", "Phases.md", "Rules.md"].includes(base))
     return ["R5", "private-doc"];
-  if (posix === "docs/Memory.md") return ["R5", "private-doc"];
+  if (base === "Memory.md") return ["R5", "private-doc"];
   if (/\.(key|pem|p12|pfx)$/.test(posix)) return ["R5", "key-material"];
   if (/\.(db|sqlite|sqlite3)$/.test(posix) || /\.(db|sqlite)-(journal|wal|shm)$/.test(posix))
     return ["R5", "local-database"];
@@ -171,13 +173,73 @@ function gitLines(args) {
   return out.toString("utf8").split("\0").filter((s) => s !== "");
 }
 
+export function scanRevision(rev) {
+  const listing = execFileSync("git", ["rev-list", "--objects", rev], {
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  const oidToPath = new Map();
+  const oids = [];
+  for (const line of listing.split("\n")) {
+    const m = line.match(/^([0-9a-f]{40})(?: (.*))?$/);
+    if (!m) continue;
+    if (!oidToPath.has(m[1])) {
+      oidToPath.set(m[1], m[2] || "(unknown)");
+      oids.push(m[1]);
+    }
+  }
+  const batch = execFileSync("git", ["cat-file", "--batch"], {
+    input: oids.join("\n") + "\n",
+    maxBuffer: 512 * 1024 * 1024,
+  });
+  const buf = Buffer.isBuffer(batch) ? batch : Buffer.from(batch);
+  const findings = [];
+  let off = 0;
+  while (off < buf.length) {
+    const nl = buf.indexOf(10, off);
+    if (nl === -1) break;
+    const header = buf.toString("utf8", off, nl);
+    off = nl + 1;
+    const parts = header.split(" ");
+    if (parts[1] === "missing") continue;
+    const size = parseInt(parts[2], 10);
+    const blob = buf.subarray(off, off + size);
+    off += size + 1;
+    const path = oidToPath.get(parts[0]) || "(unknown)";
+    const track = isForbiddenTrackedPath(path);
+    if (track) findings.push({ path, line: 1, rule: track[0], category: track[1] });
+    if (looksBinary(blob)) continue;
+    findings.push(...scanContent(blob.toString("utf8"), path));
+  }
+  return { scanned: oids.length, findings };
+}
+
 function main(argv) {
   const pathsArg = argv.indexOf("--paths");
+  const revArg = argv.indexOf("--rev");
+  if (pathsArg !== -1 && revArg !== -1) {
+    process.stderr.write("usage: repo-secret-scan.mjs [--paths <file>... | --rev <ref>]\n");
+    return 2;
+  }
+  if (revArg !== -1) {
+    const rev = argv[revArg + 1];
+    if (!rev) {
+      process.stderr.write("usage: repo-secret-scan.mjs [--paths <file>... | --rev <ref>]\n");
+      return 2;
+    }
+    const { scanned, findings } = scanRevision(rev);
+    findings.sort((a, b) => a.path.localeCompare(b.path) || a.line - b.line);
+    for (const f of findings) {
+      process.stdout.write(`${f.path}:${f.line}:${f.rule}:${f.category}\n`);
+    }
+    process.stdout.write(`SCANNED=${scanned} FINDINGS=${findings.length}\n`);
+    return findings.length > 0 ? 1 : 0;
+  }
   let targets;
   if (pathsArg !== -1) {
     targets = argv.slice(pathsArg + 1);
     if (targets.length === 0) {
-      process.stderr.write("usage: repo-secret-scan.mjs [--paths <file>...]\n");
+      process.stderr.write("usage: repo-secret-scan.mjs [--paths <file>... | --rev <ref>]\n");
       return 2;
     }
   } else {

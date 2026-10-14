@@ -116,6 +116,8 @@ describe("isForbiddenTrackedPath: local-only files must never be tracked", () =>
     ["docs/Architecture.md", "private-doc"],
     ["PRD.md", "private-doc"],
     ["docs/Memory.md", "private-doc"],
+    ["notes/Memory.md", "private-doc"],
+    ["Memory.md", "private-doc"],
     ["client.key", "key-material"],
     ["certs/server.pem", "key-material"],
     ["data/patients.db", "local-database"],
@@ -188,6 +190,51 @@ describe("repository hygiene regression", () => {
       expect(stdout).toContain(":R3:db-infra-credential");
       expect(stdout).not.toContain(password);
       expect(stdout).not.toContain("admin");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("history mode (--rev) scans the rewritten main branch clean", () => {
+    const out = execFileSync(
+      process.execPath,
+      ["scripts/repo-secret-scan.mjs", "--rev", "main"],
+      { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+    );
+    expect(out).toContain("FINDINGS=0");
+  });
+
+  it("history mode exits 1 on a synthetic commit holding a fake credential, without printing it", () => {
+    const dir = mkdtempSync(join(tmpdir(), "scan-history-"));
+    try {
+      const password = ["History", "leak-", "fixture-", "b3e1"].join("");
+      execFileSync("git", ["init", "-q", dir]);
+      const git = (args: string[]) =>
+        execFileSync("git", args, { cwd: dir, stdio: "ignore" });
+      git(["config", "user.email", "scan-fixture@example.invalid"]);
+      git(["config", "user.name", "scan-fixture"]);
+      writeFileSync(
+        join(dir, "notes.txt"),
+        `postgresql://svc:${password}@db.internal:5432/medcore\n`
+      );
+      git(["add", "notes.txt"]);
+      git(["commit", "-q", "-m", "fixture"]);
+      let stdout = "";
+      let code = 0;
+      try {
+        stdout = execFileSync(
+          process.execPath,
+          [join(process.cwd(), "scripts", "repo-secret-scan.mjs"), "--rev", "HEAD"],
+          { cwd: dir, encoding: "utf8" }
+        );
+      } catch (error) {
+        const err = error as { status?: number; stdout?: string };
+        code = err.status ?? -1;
+        stdout = err.stdout ?? "";
+      }
+      expect(code).toBe(1);
+      expect(stdout).toContain(":R3:db-infra-credential");
+      expect(stdout).not.toContain(password);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
