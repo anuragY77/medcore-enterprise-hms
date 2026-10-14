@@ -56,3 +56,24 @@ PRD.md
 Phases.md
 Rules.md
 docs/Memory.md
+
+# local database files (contents = patient data; dumps covered above)
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# logs (any tool, any location in the repo)
+*.log
+
+# editor / machine-specific configuration (keep local)
+.vscode/
+.idea/
+
+# private key material (beyond *.pem above)
+*.key
+*.p12
+*.pfx

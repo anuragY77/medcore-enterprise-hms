@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "secrets:scan": "node scripts/repo-secret-scan.mjs",
     "seed": "tsx src/lib/db/seed.ts",
     "seed:demo": "tsx src/lib/db/seed.ts --demo"
   },
