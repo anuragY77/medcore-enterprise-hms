@@ -245,6 +245,28 @@ describe("clinical attribution is server-authoritative (Phase 21)", () => {
       patientId: PATIENT_ID,
       appointmentId: null,
     };
+    // Phase 36: SURGEON (not NURSE) — the consultation gate is now
+    // prescriptions:write (clinical-author set), so a NURSE session is 403
+    // (asserted in the next test). SURGEON still demonstrates the guarantee
+    // under test: attribution comes from the SESSION identity, never the
+    // client-supplied doctorName or the appointment's doctor.
+    const surgeonSession = session({
+      id: "usr_surgeon_9",
+      name: "Surgeon Chidi Bello",
+      role: "SURGEON",
+      department: "Emergency",
+    });
+    const res = await postJson(postConsultation, {
+      doctorName: "Dr. Someone Else",
+      chiefComplaint: "Fever",
+      diagnosis: "Viral syndrome",
+    }, { session: surgeonSession });
+    expect(res.status).toBe(201);
+    const values = dbCtl.insertValues[0] as { doctorName: string };
+    expect(values.doctorName).toBe("Surgeon Chidi Bello");
+  });
+
+  it("Phase 36: NURSE is forbidden from authoring consultations (clinical-author gate)", async () => {
     const nurseSession = session({
       id: "usr_nurse_9",
       name: "Nurse Chidi Bello",
@@ -256,8 +278,7 @@ describe("clinical attribution is server-authoritative (Phase 21)", () => {
       chiefComplaint: "Fever",
       diagnosis: "Viral syndrome",
     }, { session: nurseSession });
-    expect(res.status).toBe(201);
-    const values = dbCtl.insertValues[0] as { doctorName: string };
-    expect(values.doctorName).toBe("Nurse Chidi Bello");
+    expect(res.status).toBe(403);
+    expect(dbCtl.insertValues).toEqual([]);
   });
 });

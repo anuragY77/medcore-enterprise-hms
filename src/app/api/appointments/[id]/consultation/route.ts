@@ -26,10 +26,19 @@ export async function POST(
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if (!hasPermission(session.user.role, "appointments:read")) {
+    // Phase 36: this POST starts a consultation — a WRITE on the appointment
+    // workflow (Scheduled/Confirmed -> consultation exists) and clinical
+    // authorship (consultationSchema requires a diagnosis). The first gate
+    // was appointments:read (a read permission gating a write) and the
+    // second patients:write, which together let RECEPTIONIST author a
+    // diagnosis and removed NURSE from a write it should never hold.
+    // appointments:write (ADMIN/DOCTOR/RECEPTIONIST) AND prescriptions:write
+    // (ADMIN/DOCTOR/SURGEON) intersect to ADMIN/DOCTOR — the clinical-author
+    // set that can both manage appointments and author clinical content.
+    if (!hasPermission(session.user.role, "appointments:write")) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-    if (!hasPermission(session.user.role, "patients:write")) {
+    if (!hasPermission(session.user.role, "prescriptions:write")) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

@@ -92,7 +92,14 @@ export async function POST(
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if (!hasPermission(session.user.role, "patients:write")) {
+    // Phase 36: clinical-authorship gate. The consultationSchema requires a
+    // diagnosis, so POSTing a consultation is authoring clinical content that
+    // lands in the permanent chart attributed to the actor (doctorName is
+    // overwritten server-side with session.user.name below). patients:write
+    // included RECEPTIONIST/NURSE — same class of defect as the Phase 27
+    // prescriptions gate — so this is prescriptions:write (ADMIN/DOCTOR/
+    // SURGEON), the established clinical-author set from the PRD role scoping.
+    if (!hasPermission(session.user.role, "prescriptions:write")) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

@@ -3,10 +3,19 @@
 // No committed tests covered the 401/403 contracts of the discharge,
 // transfer, dispense, lab-complete, or billing routes, and the prescription
 // POST was gated on patients:write, which let RECEPTIONIST (and any role
-// holding patients:write) prescribe â€” contradicting the PRD's role scoping.
+// holding patients:write) prescribe — contradicting the PRD's role scoping.
 // The prescriptions gate is now prescriptions:write (ADMIN/DOCTOR/SURGEON).
 // These tests fail if any gate is removed, widened to the wrong role, or if
 // the prescriptions regression returns.
+//
+// Phase 36: same contract for the two consultation-authoring routes. Both
+// require a diagnosis (consultationSchema), so POSTing is clinical
+// authorship: the direct patients/[id]/consultations gate moved from
+// patients:write to prescriptions:write (RECEPTIONIST/NURSE could previously
+// author chart consultations), and the appointment-start route moved from
+// appointments:read + patients:write to appointments:write +
+// prescriptions:write (a read permission gated a write, and RECEPTIONIST
+// could author a diagnosis while NURSE held a write it should not).
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const dbCtl = vi.hoisted(() => ({
@@ -90,6 +99,8 @@ import { POST as postTransfer } from "@/app/api/patients/[id]/transfer/route";
 import { POST as postDispense } from "@/app/api/pharmacy/prescriptions/[id]/dispense/route";
 import { POST as postComplete } from "@/app/api/laboratory/[id]/complete/route";
 import { POST as postBilling } from "@/app/api/billing/route";
+import { POST as postConsultation } from "@/app/api/patients/[id]/consultations/route";
+import { POST as postStartConsultation } from "@/app/api/appointments/[id]/consultation/route";
 
 const authMock = vi.mocked(auth);
 
@@ -202,6 +213,20 @@ const GATE_CASES: GateCase[] = [
     allowedRole: "BILLING",
     deniedRole: "DOCTOR",
   },
+  {
+    name: "POST /api/patients/[id]/consultations (prescriptions:write)",
+    handler: postConsultation,
+    url: `http://localhost:3000/api/patients/${ANY_ID}/consultations`,
+    allowedRole: "DOCTOR",
+    deniedRole: "RECEPTIONIST",
+  },
+  {
+    name: "POST /api/appointments/[id]/consultation (appointments:write + prescriptions:write)",
+    handler: postStartConsultation,
+    url: `http://localhost:3000/api/appointments/${ANY_ID}/consultation`,
+    allowedRole: "DOCTOR",
+    deniedRole: "RECEPTIONIST",
+  },
 ];
 
 describe("clinical workflow write gates (Phase 27)", () => {
@@ -266,6 +291,58 @@ describe("clinical workflow write gates (Phase 27)", () => {
     for (const role of ["ADMIN", "DOCTOR", "SURGEON"]) {
       const res = await call(postPrescription, {
         url: `http://localhost:3000/api/patients/${ANY_ID}/prescriptions`,
+        body: {},
+        session: session(role),
+      });
+      expect([401, 403]).not.toContain(res.status);
+    }
+  });
+
+  it("Phase 36: keeps consultation authoring out of RECEPTIONIST and NURSE (clinical-author scoping)", async () => {
+    for (const role of ["RECEPTIONIST", "NURSE", "PHARMACIST", "BILLING", "LAB_TECHNICIAN", "SECURITY"]) {
+      const res = await call(postConsultation, {
+        url: `http://localhost:3000/api/patients/${ANY_ID}/consultations`,
+        body: {},
+        session: session(role),
+      });
+      expect(res.status).toBe(403);
+      expect(dbCtl.calls).toEqual({ select: 0, insert: 0, update: 0 });
+    }
+  });
+
+  it("Phase 36: grants direct consultation authoring to ADMIN, DOCTOR, and SURGEON", async () => {
+    for (const role of ["ADMIN", "DOCTOR", "SURGEON"]) {
+      const res = await call(postConsultation, {
+        url: `http://localhost:3000/api/patients/${ANY_ID}/consultations`,
+        body: {},
+        session: session(role),
+      });
+      expect([401, 403]).not.toContain(res.status);
+    }
+  });
+
+  it("Phase 36: appointment consultation start is ADMIN/DOCTOR only (both gates enforced)", async () => {
+    const denied = [
+      "RECEPTIONIST", // holds appointments:write but not prescriptions:write
+      "NURSE", // holds neither appointments:write nor prescriptions:write
+      "SURGEON", // holds prescriptions:write but not appointments:write
+      "PHARMACIST",
+      "LAB_TECHNICIAN",
+      "BILLING",
+      "SECURITY",
+    ];
+    for (const role of denied) {
+      const res = await call(postStartConsultation, {
+        url: `http://localhost:3000/api/appointments/${ANY_ID}/consultation`,
+        body: {},
+        session: session(role),
+      });
+      expect(res.status).toBe(403);
+      expect(dbCtl.calls).toEqual({ select: 0, insert: 0, update: 0 });
+    }
+    for (const role of ["ADMIN", "DOCTOR"]) {
+      const res = await call(postStartConsultation, {
+        url: `http://localhost:3000/api/appointments/${ANY_ID}/consultation`,
         body: {},
         session: session(role),
       });
